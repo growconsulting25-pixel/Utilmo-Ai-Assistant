@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Embed test — third-party page</title>
+  <style>
+    /* Deliberately aggressive host styles: the widget must not be affected (Shadow DOM isolation). */
+    * { font-family: "Comic Sans MS", cursive !important; color: darkgreen; }
+    button { background: yellow; border: 4px dashed red; }
+    div { line-height: 3; }
+    body { margin: 40px; background: #fafafa; }
+  </style>
+</head>
+<body>
+  <h1>Generic host website</h1>
+  <p>This page only includes the one-line floating script. Host CSS is intentionally hostile to prove style isolation.</p>
+  <button type="button" onclick="UtilmoAI.open()">Host button: UtilmoAI.open()</button>
+  <script src="/widget.js" data-assistant-id="utilmo" data-mode="floating" defer></script>
+</body>
+</html>

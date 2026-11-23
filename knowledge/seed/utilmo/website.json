@@ -1,0 +1,11 @@
+{
+  "name": "Site officiel utilmo.com",
+  "url": "https://utilmo.com/",
+  "sitemaps": ["https://utilmo.com/sitemap_index.xml"],
+  "include_prefixes": ["https://utilmo.com/"],
+  "exclude_patterns": ["/wp-admin", "/wp-json", "/feed", "/tag/", "/author/", "/category/", "?"],
+  "article_sitemaps": ["https://utilmo.com/post-sitemap.xml"],
+  "max_pages": 100,
+  "collection": "both",
+  "priority": 3
+}

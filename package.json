@@ -1,0 +1,53 @@
+{
+  "name": "utilmo-ai-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Utilmo AI — intelligent sales & customer support assistant (inline + floating widget, RAG, lead qualification, admin).",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev-server.ts",
+    "build": "node scripts/build-seed-bundle.mjs && npm run build:widget && npm run build:app && node scripts/postbuild.mjs",
+    "build:widget": "vite build --config vite.widget.config.ts",
+    "build:app": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p packages/widget/tsconfig.json && tsc --noEmit -p apps/admin/tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "node tests/e2e/run-e2e.mjs",
+    "eval": "tsx tests/evals/run-evals.ts",
+    "crawl": "tsx scripts/ingest/crawl.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@netlify/database": "^2.0.3",
+    "@netlify/functions": "^6.1.1",
+    "libphonenumber-js": "^1.13.17",
+    "lucide-react": "^1.78.0",
+    "node-html-parser": "^9.0.7",
+    "openai": "^7.62.0",
+    "pg": "^8.23.1",
+    "preact": "^11.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "unpdf": "^1.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "autoprefixer": "^10.7.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

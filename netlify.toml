@@ -1,0 +1,48 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+  # Netlify Database migrations live in netlify/database/migrations and are applied on deploy.
+
+# Admin SPA routing
+[[redirects]]
+  from = "/admin/*"
+  to = "/admin/index.html"
+  status = 200
+
+# Widget: the "latest" URL is cached briefly; the versioned path can be cached longer.
+[[headers]]
+  for = "/widget.js"
+  [headers.values]
+    Cache-Control = "public, max-age=300"
+    Access-Control-Allow-Origin = "*"
+    Cross-Origin-Resource-Policy = "cross-origin"
+[[headers]]
+  for = "/widget/v1/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+    Access-Control-Allow-Origin = "*"
+    Cross-Origin-Resource-Policy = "cross-origin"
+[[headers]]
+  for = "/brand/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+    Access-Control-Allow-Origin = "*"
+    Cross-Origin-Resource-Policy = "cross-origin"
+[[headers]]
+  for = "/admin/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Robots-Tag = "noindex, nofollow"
+    Referrer-Policy = "same-origin"
+    Content-Security-Policy = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Strict-Transport-Security = "max-age=31536000"

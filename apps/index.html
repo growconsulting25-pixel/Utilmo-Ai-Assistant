@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Utilmo AI — Assistant immobilier intelligent</title>
+  <meta name="description" content="Démonstration de l'assistant IA d'Utilmo : questions, recommandations et prise de rendez-vous pour courtiers immobiliers." />
+  <link rel="icon" type="image/png" href="/brand/utilmo-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./demo.css" />
+</head>
+<body>
+  <a class="skip" href="#assistant">Aller à l'assistant</a>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a href="https://utilmo.com/fr/" class="logo" aria-label="Utilmo"><img src="/brand/utilmo-logo_2024.png" alt="Utilmo" width="120" height="36" /></a>
+      <nav aria-label="Principale">
+        <a href="#solutions">Solutions</a>
+        <a href="#assistant">Assistant</a>
+        <a class="nav-cta" href="https://utilmo.com/fr/planifier-une-demo/">Réserver une démo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="assistant" aria-labelledby="hero-title">
+      <div class="wrap">
+        <p class="eyebrow">Votre plateforme immobilière complète</p>
+        <h1 id="hero-title">Une question sur votre croissance&nbsp;? <span>Parlons-en.</span></h1>
+        <p class="lead">Notre assistant répond à vos questions sur le CRM, les sites web, la génération de leads et l'automatisation — et vous aide à trouver la bonne solution pour votre entreprise immobilière.</p>
+        <div id="utilmo-ai-chat" class="chat-slot"></div>
+      </div>
+    </section>
+
+    <section class="solutions" id="solutions" aria-labelledby="sol-title">
+      <div class="wrap">
+        <h2 id="sol-title">La technologie immobilière, parfaitement connectée.</h2>
+        <div class="grid">
+          <article><h3>CRM</h3><p>Gérez vos contacts, suivez vos occasions d'affaires et centralisez vos suivis à l'aide de pipelines, de tâches et de rappels.</p></article>
+          <article><h3>Site web</h3><p>Un site web immobilier professionnel avec intégration Centris ou CREA, conçu par l'IA ou sur mesure.</p></article>
+          <article><h3>Leads</h3><p>Des pages de publicité conçues pour attirer acheteurs et vendeurs, et des campagnes automatisées par courriel et SMS.</p></article>
+          <article><h3>IA et automatisation</h3><p>Qualifiez vos prospects, planifiez vos rendez-vous et gardez le contact grâce aux flux de travail automatisés.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div><img src="/brand/utilmo-logo_w_2024.png" alt="Utilmo" width="100" height="30" /><p>3737 Crémazie-Est, #401, Montréal (Québec)<br />514-360-2187 · support@utilmo.ca</p></div>
+      <p class="small">Page de démonstration de l'assistant IA Utilmo. Les réponses sont générées par IA à partir de la base de connaissances d'Utilmo et peuvent nécessiter une confirmation par l'équipe. <a href="https://utilmo.com/fr/politique-de-confidentialite/">Politique de confidentialité</a></p>
+    </div>
+  </footer>
+
+  <script src="/widget.js" defer></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      UtilmoAI.init({ assistantId: "utilmo", floating: true, inlineContainer: "#utilmo-ai-chat", language: undefined });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+{
+  "organization": { "slug": "utilmo", "name": "Utilmo (Marketing Websites Inc.)", "data_region": "netlify-database-default" },
+  "assistant": { "public_key": "utilmo", "name": "Utilmo AI" },
+  "allowed_domains": ["utilmo.com", "www.utilmo.com"],
+  "settings": {
+    "behavior": {
+      "assistantName": "Assistant Utilmo",
+      "companyName": "Utilmo",
+      "defaultLanguage": "fr",
+      "tone": "friendly_professional",
+      "companyDescription": {
+        "fr": "Utilmo est une plateforme immobilière tout-en-un développée au Québec (CRM, sites web avec intégration Centris/CREA, génération de leads, IA et automatisation) pour les courtiers et agences immobilières. Utilmo appartient à Marketing Websites inc. (Montréal).",
+        "en": "Utilmo is an all-in-one real estate platform built in Quebec (CRM, websites with Centris/CREA integration, lead generation, AI and automation) for real estate brokers and agencies. Utilmo is owned by Marketing Websites Inc. (Montreal)."
+      },
+      "welcome": {
+        "fr": "Bonjour 👋 Bienvenue chez Utilmo ! Je suis votre assistant virtuel. Je peux répondre à vos questions et vous aider à trouver les meilleures solutions pour votre entreprise immobilière. Qu'aimeriez-vous améliorer en priorité ?",
+        "en": "Hi 👋 Welcome to Utilmo! I'm your virtual assistant. I can answer your questions and help you find the best solutions for your real estate business. What would you like to improve first?"
+      },
+      "suggestions": {
+        "fr": ["Générer plus de leads", "Améliorer ma visibilité", "Découvrir le CRM", "Automatiser mes suivis", "Créer mon site web", "J'ai besoin de soutien"],
+        "en": ["Generate more leads", "Improve my visibility", "Discover the CRM", "Automate my follow-ups", "Build my website", "I need support"]
+      },
+      "maxResponseWords": 120,
+      "askBudget": false,
+      "contactCaptureAfterTurns": 3,
+      "escalation": { "unresolvedThreshold": 2, "supportEmail": "support@utilmo.ca", "supportPhone": "514-360-2187", "salesPhone": "514-360-2187" }
+    },
+    "ai": { "provider": "anthropic", "responseModel": "claude-opus-5-5", "analysisModel": "claude-haiku-5-5", "effort": "low", "maxOutputTokens": 1500, "retrievalTopK": 6, "embeddings": "none" },
+    "booking": { "provider": "calendly", "url": "https://calendly.com/utilmocrm/30-minute-meeting-clone", "label": { "fr": "Réserver une démo gratuite", "en": "Book a free demo" } },
+    "appearance": {
+      "primaryColor": "#4c2b7b", "accentColor": "#f47421", "backgroundColor": "#ffffff", "textColor": "#1d2124",
+      "radius": 20, "fontFamily": "Montserrat", "headingFontFamily": "Poppins", "loadGoogleFonts": true,
+      "logoUrl": "/brand/utilmo-logo_2024.png", "avatarUrl": "/brand/utilmo-icon.png",
+      "launcherPosition": "right", "launcherStyle": "circle", "attentionAnimation": true,
+      "teaser": { "enabled": true, "delaySeconds": 8, "text": { "fr": "Une question sur Utilmo ? Je suis là pour vous aider.", "en": "Questions about Utilmo? I'm here to help." } },
+      "inlineHeight": 620, "mobileFullscreen": true
+    },
+    "privacy": {
+      "noticeVersion": "2026-11-23",
+      "notice": {
+        "fr": "Cet assistant utilise l'IA. Vos messages servent à répondre à vos questions et, si vous nous laissez vos coordonnées, à vous recontacter. Ne partagez aucun mot de passe ni renseignement de paiement.",
+        "en": "This assistant uses AI. Your messages are used to answer your questions and, if you share your contact details, to follow up with you. Never share passwords or payment information."
+      },
+      "privacyPolicyUrl": { "fr": "https://utilmo.com/fr/politique-de-confidentialite/", "en": "https://utilmo.com/privacy-policy/" },
+      "conversationRetentionDays": 365,
+      "sessionRetentionDays": 30
+    },
+    "limits": { "messagesPerMinute": 8, "messagesPerConversation": 80, "dailyMessageCap": 3000, "maxMessageChars": 2000 }
+  },
+  "services": [
+    {
+      "key": "crm", "categories": ["CRM", "AUTOMATION"], "next_step": "demo", "url": "https://utilmo.com/fr/crm-leads/", "sort": 10,
+      "name": { "fr": "CRM immobilier Utilmo", "en": "Utilmo real estate CRM" },
+      "description": { "fr": "CRM conçu pour les courtiers : contacts, pipelines, tâches, rappels, appels/SMS/courriels et suivis automatisés.", "en": "CRM built for brokers: contacts, pipelines, tasks, reminders, calls/SMS/e-mails and automated follow-ups." },
+      "problems": { "fr": ["Leads perdus ou oubliés", "Suivis manuels", "Contacts dispersés", "Gestion d'une grande base de contacts"], "en": ["Lost or forgotten leads", "Manual follow-ups", "Scattered contacts", "Managing a large contact database"] },
+      "features": { "fr": ["Pipelines, tâches et rappels", "Notification SMS et courriel à chaque nouveau lead", "Appels, SMS et courriels depuis Utilmo, composeur et enregistrement d'appels", "Campagnes automatisées courriel/SMS", "Intégration Centris ou CREA", "Intégrations Google Calendar, Office 365, Mailchimp", "Application mobile"], "en": ["Pipelines, tasks and reminders", "SMS and e-mail notification for every new lead", "Calls, SMS and e-mails from Utilmo, dialer and call recording", "Automated e-mail/SMS campaigns", "Centris or CREA integration", "Google Calendar, Office 365, Mailchimp integrations", "Mobile app"] },
+      "price_note": { "fr": "79,99 $/mois, sans frais de mise en place (site web non inclus). Essai gratuit offert.", "en": "$79.99/month, no setup fees (website not included). Free trial available." }
+    },
+    {
+      "key": "lead_generation", "categories": ["LEAD_GENERATION", "MARKETING"], "next_step": "demo", "url": "https://utilmo.com/fr/crm-leads/", "sort": 20,
+      "name": { "fr": "Génération de leads acheteurs et vendeurs", "en": "Buyer and seller lead generation" },
+      "description": { "fr": "Pages de publicité (landing pages) et campagnes publicitaires ciblées, avec leads importés directement dans le CRM.", "en": "Landing pages and targeted ad campaigns, with leads imported directly into the CRM." },
+      "problems": { "fr": ["Pas assez de leads vendeurs ou acheteurs", "Dépendance au bouche-à-oreille"], "en": ["Not enough seller or buyer leads", "Relying on word of mouth"] },
+      "features": { "fr": ["Landing pages pour attirer acheteurs et vendeurs", "Publicités Facebook et Instagram ciblées par région ou code postal (service optionnel)", "Google Ads gérés par des experts (service optionnel)", "Leads importés dans le CRM avec notification"], "en": ["Landing pages to attract buyers and sellers", "Facebook & Instagram ads targeted by area or postal code (optional service)", "Google Ads managed by experts (optional service)", "Leads imported into the CRM with notification"] },
+      "price_note": { "fr": "", "en": "" }
+    },
+    {
+      "key": "website", "categories": ["WEBSITE", "BRANDING"], "next_step": "demo", "url": "https://utilmo.com/fr/site-web-pour-courtier-immobilier/", "sort": 30,
+      "name": { "fr": "Site web immobilier avec Centris/CREA", "en": "Real estate website with Centris/CREA" },
+      "description": { "fr": "Sites web professionnels pour courtiers et agences, conçus par l'IA ou sur mesure, avec intégration Centris ou CREA.", "en": "Professional websites for brokers and agencies, AI-designed or custom, with Centris or CREA integration." },
+      "problems": { "fr": ["Pas de site web ou site désuet", "Faible conversion des visiteurs", "Inscriptions non affichées"], "en": ["No website or outdated website", "Low visitor conversion", "Listings not displayed"] },
+      "features": { "fr": ["Intégration Centris ou CREA incluse", "Forfaits Essentiel, Pro et Élite", "Pages de propriétés non comptées dans le maximum de pages", "Accès au CRM Utilmo et à la génération de leads (Essentiel)"], "en": ["Centris or CREA integration included", "Essential, Pro and Elite plans", "Property pages not counted in the page limit", "Access to Utilmo CRM and lead generation (Essential)"] },
+      "price_note": { "fr": "Essentiel : 1 000 $ + 129,99 $/mois (hébergement, intégration MLS et CRM inclus). Pro : 2 000 $. Élite : 3 500 $.", "en": "Essential: $1,000 + $129.99/month (hosting, MLS integration and CRM included). Pro: $2,000. Elite: $3,500." }
+    },
+    {
+      "key": "automation", "categories": ["AUTOMATION", "AI_ASSISTANT", "CRM"], "next_step": "demo", "url": "https://utilmo.com/fr/", "sort": 40,
+      "name": { "fr": "Automatisation des suivis (courriel, SMS, IA)", "en": "Follow-up automation (e-mail, SMS, AI)" },
+      "description": { "fr": "Flux de travail automatisés, campagnes courriel/SMS et outils d'IA pour qualifier les prospects et planifier les rendez-vous.", "en": "Automated workflows, e-mail/SMS campaigns and AI tools to qualify leads and schedule appointments." },
+      "problems": { "fr": ["Manque de temps pour faire les suivis", "Prospects qui refroidissent"], "en": ["No time for follow-ups", "Leads going cold"] },
+      "features": { "fr": ["Campagnes automatisées par courriel et SMS", "Suivi automatisé avec plan d'action avancé", "Outils d'IA pour qualifier les prospects et planifier les rendez-vous"], "en": ["Automated e-mail and SMS campaigns", "Automatic follow-ups with advanced action plans", "AI tools to qualify leads and schedule appointments"] },
+      "price_note": { "fr": "", "en": "" }
+    },
+    {
+      "key": "visibility_marketing", "categories": ["MARKETING", "BRANDING"], "next_step": "demo", "url": "https://utilmo.com/fr/addons/", "sort": 50,
+      "name": { "fr": "Visibilité et marketing (SEO, médias sociaux, publicité)", "en": "Visibility & marketing (SEO, social media, ads)" },
+      "description": { "fr": "Services optionnels : SEO, gestion des médias sociaux, publication automatique sur Facebook, Google Ads/PPC.", "en": "Optional services: SEO, social media management, automatic Facebook posting, Google Ads/PPC." },
+      "problems": { "fr": ["Faible visibilité en ligne", "Marque personnelle peu connue"], "en": ["Low online visibility", "Weak personal brand"] },
+      "features": { "fr": ["Publication automatique des nouvelles inscriptions sur Facebook", "Services SEO", "Gestion des médias sociaux", "Gestion Google Ads / PPC", "Création de vidéos et contenu de branding"], "en": ["Automatic Facebook posting of new listings", "SEO services", "Social media management", "Google Ads / PPC management", "Branded video and social content"] },
+      "price_note": { "fr": "", "en": "" }
+    },
+    {
+      "key": "branding", "categories": ["BRANDING", "WEBSITE"], "next_step": "demo", "url": "https://utilmo.com/fr/site-web-pour-courtier-immobilier/", "sort": 60,
+      "name": { "fr": "Image de marque et conception personnalisée", "en": "Branding and custom design" },
+      "description": { "fr": "Conception de site personnalisée, conception de logo (forfait Élite) et contenu de branding pour les réseaux sociaux.", "en": "Custom website design, logo design (Elite plan) and branded social media content." },
+      "problems": { "fr": ["Image de marque peu distinctive"], "en": ["Brand doesn't stand out"] },
+      "features": { "fr": ["Conception de logo professionnel (Élite)", "Pages entièrement personnalisées (Élite)", "Vidéos et contenu de branding"], "en": ["Professional logo design (Elite)", "Fully custom pages (Elite)", "Branded videos and content"] },
+      "price_note": { "fr": "", "en": "" }
+    },
+    {
+      "key": "white_label", "categories": ["OTHER", "CRM"], "next_step": "quote", "url": "https://utilmo.com/fr/white-label/", "sort": 80,
+      "name": { "fr": "Utilmo White Label", "en": "Utilmo White Label" },
+      "description": { "fr": "CRM immobilier clé en main à revendre sous votre propre marque.", "en": "Turnkey real estate CRM to resell under your own brand." },
+      "problems": { "fr": ["Agence voulant offrir sa propre technologie"], "en": ["Agency wanting to offer its own technology"] },
+      "features": { "fr": ["CRM, application desktop et site web à votre image", "Outils de génération de leads intégrés", "PMS et automatisations"], "en": ["CRM, desktop app and website under your brand", "Built-in lead generation tools", "PMS and automations"] },
+      "price_note": { "fr": "", "en": "" }
+    },
+    {
+      "key": "support", "categories": ["CUSTOMER_SUPPORT"], "next_step": "support", "url": "https://utilmo.com/fr/contact/", "sort": 90,
+      "name": { "fr": "Soutien aux clients Utilmo", "en": "Utilmo customer support" },
+      "description": { "fr": "Aide pour les clients existants : support@utilmo.ca ou 514-360-2187.", "en": "Help for existing customers: support@utilmo.ca or 514-360-2187." },
+      "problems": { "fr": ["Besoin d'aide avec mon compte"], "en": ["Need help with my account"] },
+      "features": { "fr": ["Soutien par courriel et téléphone", "Formation hebdomadaire"], "en": ["E-mail and phone support", "Weekly training"] },
+      "price_note": { "fr": "", "en": "" }
+    }
+  ],
+  "conflicts": [
+    { "topic": "Durée de l'essai gratuit / free trial length", "description": "CRM page and the 30-day trial page say 30-day free trial; Schedule Demo and Onboarding pages show a '14-Day Free Trial' button.", "source_urls": ["https://utilmo.com/crm-leads/", "https://utilmo.com/30-day-free-trial/", "https://utilmo.com/schedule-demo/", "https://utilmo.com/onboarding/"] },
+    { "topic": "Nombre de modèles du forfait Essentiel / Essential template count", "description": "Website pricing page says 'Choice of 17 Templates'; free-trial page says 'Choice of 12 Templates' and 'Fixed Site Map'.", "source_urls": ["https://utilmo.com/real-estate-website-design/", "https://utilmo.com/30-day-free-trial/"] },
+    { "topic": "Promotion site web 500 $ / $500 website promo", "description": "Promo page says 'Today only! Save $500 on your website' — time-limited, validity unknown. Not to be promised until confirmed.", "source_urls": ["https://utilmo.com/fr/promo/"] }
+  ]
+}
