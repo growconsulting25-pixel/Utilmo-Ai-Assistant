@@ -39,7 +39,7 @@ export const SettingsSchema = z.object({
     companyDescription: I18n.default({ fr: "", en: "" }),
     welcome: I18n.default({ fr: "Bonjour 👋 Comment puis-je vous aider ?", en: "Hi 👋 How can I help?" }),
     suggestions: I18nList.default({ fr: [], en: [] }),
-    maxResponseWords: z.number().int().min(40).max(400).default(130),
+    maxResponseWords: z.number().int().min(15).max(400).default(130),
     /** Fields the assistant may collect, in preferred order. */
     qualificationFields: z.array(z.enum(QUALIFICATION_FIELDS)).default([...QUALIFICATION_FIELDS]),
     /** Budget is only asked when explicitly enabled. */

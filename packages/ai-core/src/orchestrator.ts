@@ -170,7 +170,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     decision = {
       state: justEnteredSupport ? "EXISTING_CUSTOMER_SUPPORT" : stepState(nextStep?.key ?? null), askField: null, createTicket: false, handoff: false, saveLead: true,
       offerBooking: done && bookingAvailable,
-      guidance: ["Answer ONLY the visitor's question, in at most 2 short sentences (max 45 words). Do NOT ask any question and do not ask for contact details: the application asks the next step itself right after your answer."],
+      guidance: ["Answer ONLY the visitor's question in ONE or TWO very short sentences (max 25 words total). No links, no 'more details here', no lists. If the exact answer (e.g. a price) is not in the sources, just say an advisor will prepare a tailored proposal. Do NOT ask any question: the application asks the next step itself."],
       suggestions: nextStep && !justEnteredSupport ? { fr: nextStep.options.fr, en: nextStep.options.en } : { fr: [], en: [] },
     };
     profile.flags = { ...(profile.flags ?? {}), flow_step: justEnteredSupport ? "done" : (nextStep?.key ?? "done") };
@@ -184,7 +184,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
       // Flow already collected what matters: keep answers short, no further interrogation.
       decision.askField = null;
       decision.guidance = decision.guidance.filter((g) => !/ask ONE question|single missing/.test(g));
-      decision.guidance.push("Do not ask further qualification questions. Keep it to 1-3 short sentences.");
+      decision.guidance.push("Do not ask further qualification questions. Reply in 1-2 very short sentences (max 30 words), no links. When relevant, invite them to book a demo with the button.");
+      if (bookingAvailable && !supportMode) decision.offerBooking = true;
     }
     profile = markAsked(profile, decision.askField);
   }
