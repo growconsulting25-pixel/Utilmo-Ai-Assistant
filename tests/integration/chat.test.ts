@@ -40,6 +40,7 @@ describe("guided flow → structured lead (scenarios 1 & 11)", () => {
     expect(r.reply.length).toBeLessThan(260);
     r = await chat(bg, "Jean Tremblay", token);
     expect(r.reply).toMatch(/Merci Jean !.*numéro/);
+    expect(r.reply).toMatch(/^\*\*/);
     r = await chat(bg, "514-555-0123", token);
     expect(r.reply).toMatch(/courriel/);
     expect(r.actions.some((a) => a.type === "contact_saved")).toBe(true);

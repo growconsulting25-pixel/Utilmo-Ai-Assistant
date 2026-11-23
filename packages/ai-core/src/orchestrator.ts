@@ -170,7 +170,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     decision = {
       state: justEnteredSupport ? "EXISTING_CUSTOMER_SUPPORT" : stepState(nextStep?.key ?? null), askField: null, createTicket: false, handoff: false, saveLead: true,
       offerBooking: done && bookingAvailable,
-      guidance: ["Answer ONLY the visitor's question in ONE or TWO very short sentences (max 25 words total). No links, no 'more details here', no lists. If the exact answer (e.g. a price) is not in the sources, just say an advisor will prepare a tailored proposal. Do NOT ask any question: the application asks the next step itself."],
+      guidance: ["Answer ONLY the visitor's question, very briefly: one short line, then if listing options use 2-4 bullet points of 2-6 words each (e.g. '- Publicité Meta'). Max 30 words total. Bold the key term. No links, no 'more details here'. If the exact answer (e.g. a price) is not in the sources, just say an advisor will prepare a tailored proposal. Do NOT ask any question: the application asks the next step itself."],
       suggestions: nextStep && !justEnteredSupport ? { fr: nextStep.options.fr, en: nextStep.options.en } : { fr: [], en: [] },
     };
     profile.flags = { ...(profile.flags ?? {}), flow_step: justEnteredSupport ? "done" : (nextStep?.key ?? "done") };
@@ -218,16 +218,20 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   let flowText = "";
   if (flowActive) {
     const gf = s.guidedFlow;
-    if (flowParse?.invalid && askedStep) flowText = (flowParse.invalid === "phone" ? gf.invalidPhone : gf.invalidEmail)[language];
-    else if (justEnteredSupport) flowText = gf.supportPrompt[language];
+    if (flowParse?.invalid && askedStep) flowText = `**${(flowParse.invalid === "phone" ? gf.invalidPhone : gf.invalidEmail)[language]}**`;
+    else if (justEnteredSupport) flowText = `**${gf.supportPrompt[language]}**`;
     else if (!nextStep) flowText = fill((profile.flags?.contact_refused ? gf.refusalCompletion : gf.completion)[language], profile);
     else {
       let ack = "";
       if (!isQuestion && flowParse?.answered) {
-        if (askedStep?.key === "main_goal" && recs[0]) ack = recs[0].why;
-        else if (askedStep?.key === "is_broker" || askedStep?.key === "brokerage" || askedStep?.key === "role") ack = language === "fr" ? "Parfait !" : "Great!";
+        if (askedStep?.key === "main_goal") {
+          const cats = (val(profile, "services_interest") ?? []) as string[];
+          const hl = cats.map((c) => gf.highlights[c]).find(Boolean);
+          if (hl && hl[language].length) ack = `${gf.highlightsIntro[language]}\n${hl[language].map((x) => `- ${x}`).join("\n")}`;
+          else if (recs[0]) ack = recs[0].why;
+        } else if (askedStep?.key === "is_broker" || askedStep?.key === "brokerage" || askedStep?.key === "role") ack = language === "fr" ? "Parfait !" : "Great!";
       }
-      flowText = [ack, fill(nextStep.question[language], profile)].filter(Boolean).join(" ");
+      flowText = [ack, `**${fill(nextStep.question[language], profile)}**`].filter(Boolean).join("\n\n");
     }
     if (flowParse?.invalid && askedStep) decision.suggestions = { fr: askedStep.options.fr, en: askedStep.options.en };
   }

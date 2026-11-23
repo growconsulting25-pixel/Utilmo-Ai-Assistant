@@ -61,6 +61,15 @@ export const SettingsSchema = z.object({
     refusalCompletion: I18n.default({ fr: "Aucun problème ! Vous pouvez réserver une démo quand vous voulez, ou me poser vos questions.", en: "No problem! You can book a demo anytime, or ask me your questions." }),
     invalidPhone: I18n.default({ fr: "Ce numéro ne semble pas valide. Pouvez-vous le vérifier ? (ex. 514-555-0123)", en: "That number doesn't look valid. Could you check it? (e.g. 514-555-0123)" }),
     invalidEmail: I18n.default({ fr: "Ce courriel ne semble pas valide. Pouvez-vous le vérifier ?", en: "That email doesn't look valid. Could you check it?" }),
+    /** Short bullet points shown after the visitor picks a priority (verified services only). */
+    highlightsIntro: I18n.default({ fr: "Nous proposons :", en: "We offer:" }),
+    highlights: z.record(z.string(), I18nList).default({
+      LEAD_GENERATION: { fr: ["Pages de capture (landing pages)", "Publicité Meta (Facebook / Instagram)", "Google Ads", "Leads envoyés dans votre CRM"], en: ["Landing pages", "Meta ads (Facebook / Instagram)", "Google Ads", "Leads sent to your CRM"] },
+      MARKETING: { fr: ["Référencement (SEO)", "Gestion des réseaux sociaux", "Publication auto. de vos inscriptions", "Google Ads"], en: ["SEO", "Social media management", "Auto-posting of your listings", "Google Ads"] },
+      CRM: { fr: ["Pipelines, tâches et rappels", "Appels, SMS et courriels intégrés", "Intégration Centris / CREA", "Application mobile"], en: ["Pipelines, tasks and reminders", "Built-in calls, SMS and email", "Centris / CREA integration", "Mobile app"] },
+      AUTOMATION: { fr: ["Campagnes courriel et SMS automatisées", "Suivis automatiques", "Alerte à chaque nouveau lead"], en: ["Automated email & SMS campaigns", "Automatic follow-ups", "Alert for every new lead"] },
+      WEBSITE: { fr: ["Site conçu par l'IA ou sur mesure", "Intégration Centris / CREA", "Forfaits Essentiel, Pro et Élite"], en: ["AI-designed or custom website", "Centris / CREA integration", "Essential, Pro and Elite plans"] },
+    }),
     supportPrompt: I18n.default({ fr: "D'accord ! Décrivez-moi brièvement votre question ou le problème rencontré.", en: "Sure! Briefly describe your question or the issue." }),
   }).prefault({}),
   ai: z.object({
@@ -141,7 +150,7 @@ export function publicSettings(s: AssistantSettings) {
     assistantName: s.behavior.assistantName,
     companyName: s.behavior.companyName,
     defaultLanguage: s.behavior.defaultLanguage,
-    welcome: s.guidedFlow.enabled ? { fr: `${s.behavior.welcome.fr}\n\n${s.guidedFlow.steps[0].question.fr}`.trim(), en: `${s.behavior.welcome.en}\n\n${s.guidedFlow.steps[0].question.en}`.trim() } : s.behavior.welcome,
+    welcome: s.guidedFlow.enabled ? { fr: `${s.behavior.welcome.fr}\n\n**${s.guidedFlow.steps[0].question.fr}**`.trim(), en: `${s.behavior.welcome.en}\n\n**${s.guidedFlow.steps[0].question.en}**`.trim() } : s.behavior.welcome,
     suggestions: s.guidedFlow.enabled ? s.guidedFlow.steps[0].options : s.behavior.suggestions,
     booking: { enabled: s.booking.provider !== "none" && !!s.booking.url, url: s.booking.url, label: s.booking.label },
     appearance: s.appearance,
