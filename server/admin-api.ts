@@ -481,7 +481,8 @@ route("GET", "/system", "viewer", async () => {
   return json({
     ai_provider: env("AI_PROVIDER") ?? "anthropic (default)", ai_gateway: !!(env("ANTHROPIC_BASE_URL") || env("NETLIFY_AI_GATEWAY_URL")), own_ai_key: !!env("AI_API_KEY"),
     embeddings: getEmbedder() ? "openai" : "not_configured (full-text retrieval only)", pgvector: await hasVector().catch(() => false),
-    secrets: { SESSION_SECRET: hasSecret("SESSION_SECRET"), ADMIN_AUTH_SECRET: hasSecret("ADMIN_AUTH_SECRET"), ENCRYPTION_KEY: hasSecret("ENCRYPTION_KEY"), ADMIN_SETUP_TOKEN: hasSecret("ADMIN_SETUP_TOKEN") },
+    secrets: Object.fromEntries(["SESSION_SECRET", "ADMIN_AUTH_SECRET", "ENCRYPTION_KEY"].map((k) => [k, hasSecret(k) ? "environment variable" : "server-generated (database)"])),
+    admin_setup_token: hasSecret("ADMIN_SETUP_TOKEN") ? "configured" : "not configured",
     database: env("DATABASE_URL") ? "DATABASE_URL" : "Netlify Database",
   });
 });
@@ -491,13 +492,16 @@ async function handleAuth(req: Request, path: string, ctx: AdminCtx): Promise<Re
   const ip = ctx.ip ?? clientIp(req);
   if (path === "/setup-status" && req.method === "GET") {
     const r = await one<{ n: number }>(`SELECT count(*)::int AS n FROM admin_users`);
-    return json({ needsSetup: (r?.n ?? 0) === 0 });
+    const { hasSecret, isDevMode } = await import("./env");
+    return json({ needsSetup: (r?.n ?? 0) === 0, setupTokenConfigured: hasSecret("ADMIN_SETUP_TOKEN") || isDevMode() });
   }
   if (path === "/setup" && req.method === "POST") {
     if (!(await rateLimit(`setup:${ipHash(ip)}`, 5, 900))) throw new HttpError(429, "rate_limited");
     const b = await body(req, z.object({ token: z.string().min(1).max(500), email: z.string().email(), password: z.string(), name: z.string().max(100).optional(), organization: z.string().default("utilmo") }));
     const count = await one<{ n: number }>(`SELECT count(*)::int AS n FROM admin_users`);
     if ((count?.n ?? 0) > 0) throw new HttpError(409, "already_initialized");
+    const { hasSecret, isDevMode } = await import("./env");
+    if (!hasSecret("ADMIN_SETUP_TOKEN") && !isDevMode()) throw new HttpError(503, "setup_token_not_configured", "Set ADMIN_SETUP_TOKEN (16+ characters) in Netlify environment variables, redeploy, then use it here.");
     if (!setupTokenMatches(b.token)) { await audit(null, null, "admin.setup_failed", null, null, {}, ip); throw new HttpError(403, "invalid_setup_token"); }
     const pwErr = validatePassword(b.password); if (pwErr) throw new HttpError(400, "weak_password", pwErr);
     const org = await one<{ id: string }>(`SELECT id FROM organizations WHERE slug = $1`, [b.organization]);
@@ -524,6 +528,8 @@ async function handleAuth(req: Request, path: string, ctx: AdminCtx): Promise<Re
 /** Entry point for /api/admin/* */
 export async function handleAdmin(req: Request, ctx: AdminCtx = {}): Promise<Response> {
   try {
+    const { ensureSecrets } = await import("./env");
+    await ensureSecrets();
     const url = new URL(req.url);
     const path = url.pathname.replace(/^\/api\/admin/, "") || "/";
     const pub = await handleAuth(req, path, ctx);

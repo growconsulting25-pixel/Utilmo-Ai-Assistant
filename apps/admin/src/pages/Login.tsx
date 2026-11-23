@@ -4,9 +4,10 @@ import { ErrorBox, Field } from "../ui";
 
 export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [tokenConfigured, setTokenConfigured] = useState(true);
   const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [token, setToken] = useState(""); const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false); const [done, setDone] = useState(false);
-  useEffect(() => { api<{ needsSetup: boolean }>("/setup-status").then((r) => setNeedsSetup(r.needsSetup)).catch(() => {}); }, []);
+  useEffect(() => { api<{ needsSetup: boolean; setupTokenConfigured: boolean }>("/setup-status").then((r) => { setNeedsSetup(r.needsSetup); setTokenConfigured(r.setupTokenConfigured); }).catch(() => {}); }, []);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try {
@@ -20,6 +21,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         <div className="flex items-center gap-2"><img src="/brand/utilmo-logo_2024.png" alt="Utilmo" className="h-8" /><span className="rounded bg-brand-accent/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-accent">AI</span></div>
         <div><h1 className="text-xl font-semibold">{needsSetup ? "Configuration initiale" : "Administration"}</h1>
           <p className="text-sm text-slate-500">{needsSetup ? "Créez le compte propriétaire avec le jeton ADMIN_SETUP_TOKEN défini dans Netlify." : "Connectez-vous pour gérer l'assistant."}</p></div>
+        {needsSetup && !tokenConfigured && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Définissez d'abord la variable d'environnement <b>ADMIN_SETUP_TOKEN</b> (16 caractères min.) dans Netlify → Configuration du site → Variables d'environnement, puis redéployez.</div>}
         {done && <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Compte créé. Vous pouvez vous connecter.</div>}
         <ErrorBox error={error} />
         {needsSetup && <Field label="Jeton de configuration"><input className="input" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} required /></Field>}

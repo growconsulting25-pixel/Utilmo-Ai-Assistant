@@ -33,6 +33,8 @@ export function Floating({ store }: { store: WidgetStore }) {
 
   const dismissTeaser = () => { setTeaser(false); try { sessionStorage.setItem("utilmo-ai:teaser", "1"); } catch { /* */ } };
   if (state.configError || !s) return null;
+  // On small screens, avoid covering the inline chat while it is on screen.
+  if (!open && state.inlineVisible && window.matchMedia("(max-width: 640px)").matches) return null;
   const side = s.appearance.launcherPosition;
   return (
     <div class={`u-floating u-${side}${s.appearance.mobileFullscreen ? " u-mobile-full" : ""}`}>

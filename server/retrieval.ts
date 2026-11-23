@@ -5,6 +5,21 @@ import { getDb, many } from "./db";
 const STOP = new Set(("le la les un une des du de d l et ou en au aux a à est sont je j tu il elle nous vous ils elles mon ma mes ton ta tes son sa ses notre votre vos leur leurs ce cet cette ces qui que quoi quel quelle quels quelles dans pour par sur avec sans plus moins pas ne y se s c qu n m t est-ce comment combien pourquoi quand où ai as avez avons ont être avoir fait faire peux peut pouvez veux voudrais " +
   "the a an and or of to in on for with without is are be was were i you he she we they my your our their it this that these those what which who how much many why when where do does did can could would should will have has had me us them about from at by as not no yes").split(/\s+/));
 
+const fold = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+export function queryTerms(queries: string[]): string[] {
+  return (toTsQuery(queries) ?? "").split(" | ").map((t) => t.replace(/:\*$/, "")).filter(Boolean);
+}
+
+/** Fraction of distinct query terms (accent-insensitive, prefix match on 5 chars) present in the text. */
+export function coverage(terms: string[], text: string): number {
+  if (!terms.length) return 0;
+  const words = new Set(fold(text).split(/[^\p{L}\p{N}]+/u));
+  const stems = new Set([...words].map((w) => w.slice(0, 5)));
+  const hits = terms.filter((t) => { const f = fold(t); return words.has(f) || stems.has(f.slice(0, 5)); }).length;
+  return hits / terms.length;
+}
+
 /** Turn free-text queries into an OR tsquery of meaningful terms (with prefix matching). */
 export function toTsQuery(queries: string[]): string | null {
   const terms = new Set<string>();
@@ -49,7 +64,8 @@ export async function searchKnowledge(assistantId: string, queries: string[], op
       FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id, q
       WHERE c.assistant_id = $1 AND d.status = 'active' AND d.collection = ANY($3) AND c.tsv @@ q.tq
       ORDER BY rank DESC LIMIT $4`, [assistantId, tsq, collections, fetchN]);
-    rows.forEach((row, i) => results.set(row.id, { row, score: 1 / (10 + i) + Number(row.rank) }));
+    const terms = queryTerms(queries);
+    rows.forEach((row, i) => results.set(row.id, { row, score: 1 / (10 + i) + Number(row.rank) + 1.5 * coverage(terms, `${row.title} ${row.heading ?? ""} ${row.content}`) ** 2 }));
   }
 
   if (opts.embedder && (await hasVector())) {
@@ -72,6 +88,7 @@ export async function searchKnowledge(assistantId: string, queries: string[], op
   const boosted = [...results.values()].map(({ row, score }) => {
     let s = score * (1 + (4 - row.priority) * 0.25) * (row.verified ? 1.15 : 1);
     if (row.doc_type === "article") s *= 0.6;
+    if (row.doc_type === "legal") s *= 0.45;
     if (opts.collection === "support" && row.collection === "support") s *= 1.4;
     return { row, score: s };
   }).sort((a, b) => b.score - a.score);

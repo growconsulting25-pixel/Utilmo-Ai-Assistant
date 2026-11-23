@@ -12,11 +12,13 @@ import { rateLimit } from "./ratelimit";
 import { searchKnowledge } from "./retrieval";
 import { signSession, verifySession } from "./session";
 import { loadAssistant, loadServices, type AssistantCtx } from "./tenant";
+import { ensureSecrets } from "./env";
 import { enqueueEvent } from "./webhooks";
 
 export interface Ctx { ip?: string; waitUntil?: (p: Promise<unknown>) => void; triggerCrawl?: (assistant: AssistantCtx, sourceId: string) => Promise<void> }
 
 async function resolveAssistant(req: Request, publicKey: string | null) {
+  await ensureSecrets();
   if (!publicKey || !/^[a-z0-9_-]{1,64}$/i.test(publicKey)) throw new HttpError(400, "invalid_assistant");
   const a = await loadAssistant(publicKey);
   if (!a || a.status !== "active") throw new HttpError(404, "assistant_not_found");

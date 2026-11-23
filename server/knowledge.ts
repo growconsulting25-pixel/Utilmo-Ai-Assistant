@@ -19,9 +19,9 @@ export async function ingestDocument(a: { id: string; organizationId: string }, 
   const content = sanitizeSourceText(d.content).replace(/\n{3,}/g, "\n\n").trim();
   const hash = sha256(content);
   // Crawled pages are identified by URL; other documents (seed, FAQ, uploads) by source + title.
-  const prev = d.docType === "page" && d.url
+  const prev = ["page", "legal", "article"].includes(d.docType) && d.url
     ? await one<{ id: string; content_hash: string; version: number; verified: boolean; metadata: { edited?: boolean } }>(
-        `SELECT id, content_hash, version, verified, metadata FROM knowledge_documents WHERE assistant_id = $1 AND url = $2 AND doc_type = 'page' AND status <> 'superseded' ORDER BY version DESC LIMIT 1`,
+        `SELECT id, content_hash, version, verified, metadata FROM knowledge_documents WHERE assistant_id = $1 AND url = $2 AND doc_type IN ('page','legal','article') AND status <> 'superseded' ORDER BY version DESC LIMIT 1`,
         [a.id, d.url])
     : d.sourceId
       ? await one<{ id: string; content_hash: string; version: number; verified: boolean; metadata: { edited?: boolean } }>(
@@ -89,6 +89,9 @@ export async function bootstrapAssistant(a: AssistantCtx, triggerCrawl?: (source
   const bundle = SEED_BUNDLE[a.publicKey];
   if (!(await acquireLock(`seed:${a.id}`, 120))) return false;
   try {
+    // Re-check under the lock: the in-memory settings cache may be stale on other instances.
+    const cur = await one<{ v: number | null }>(`SELECT (settings->>'seedVersionApplied')::int AS v FROM assistant_settings WHERE assistant_id = $1`, [a.id]);
+    if ((cur?.v ?? 0) >= SEED_VERSION) { a.settings.seedVersionApplied = cur!.v!; return false; }
     let crawlSourceId: string | null = null;
     if (bundle) {
       const src = await one<{ id: string }>(
@@ -114,6 +117,7 @@ export async function bootstrapAssistant(a: AssistantCtx, triggerCrawl?: (source
     await getDb().query(
       `UPDATE assistant_settings SET settings = jsonb_set(settings, '{seedVersionApplied}', to_jsonb($2::int)), updated_at = now() WHERE assistant_id = $1`,
       [a.id, SEED_VERSION]);
+    a.settings.seedVersionApplied = SEED_VERSION;
     if (crawlSourceId && triggerCrawl) await triggerCrawl(crawlSourceId).catch((e) => console.warn("[bootstrap] crawl trigger failed", String(e)));
     return true;
   } finally {
@@ -254,10 +258,11 @@ export async function crawlSource(a: { id: string; organizationId: string }, sou
     const text = p.text.split("\n").filter((l) => (freq.get(l) ?? 0) < threshold || l.startsWith("#")).join("\n");
     if (text.length < 120) continue;
     const isArticle = articleSet.has(p.url);
+    const isLegal = /(privacy|confidentialit|terms|conditions|cookie|legal|mentions)/i.test(p.url);
     const res = await ingestDocument(a, {
       sourceId, title: p.title || p.url, url: p.url, language: p.lang === "en" ? "en" : "fr",
       collection: (src.collection as DocInput["collection"]) ?? "both", priority: isArticle ? 4 : src.priority,
-      docType: isArticle ? "article" : "page", content: text, verified: false, fetchedAt: now, metadata: { crawled: true },
+      docType: isArticle ? "article" : isLegal ? "legal" : "page", content: text, verified: false, fetchedAt: now, metadata: { crawled: true },
     });
     stats[res.action]++;
   }

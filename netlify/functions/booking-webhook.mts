@@ -1,3 +1,4 @@
+import { ensureSecrets } from "../../server/env";
 import type { Config, Context } from "@netlify/functions";
 import { decrypt, hmac, safeEqual } from "../../server/crypto";
 import { getDb, one } from "../../server/db";
@@ -8,6 +9,7 @@ import { json } from "../../server/http";
  * "booking_confirmed" is recorded ONLY from a verified scheduling-provider callback — never from the AI.
  */
 export default async (req: Request, context: Context) => {
+  await ensureSecrets();
   const id = context.params.id;
   if (!/^[0-9a-f-]{36}$/.test(id ?? "")) return json({ error: "not_found" }, { status: 404 });
   const it = await one<{ id: string; organization_id: string; assistant_id: string; type: string; secret_encrypted: string | null; enabled: boolean }>(

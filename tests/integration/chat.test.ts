@@ -183,3 +183,15 @@ describe("CRM webhook delivery (scenario 19)", () => {
     hook.close();
   });
 });
+
+describe("bootstrap idempotency", () => {
+  it("imports the seed only once even with a stale settings cache", async () => {
+    const { loadAssistant } = await import("../../server/tenant");
+    const { bootstrapAssistant } = await import("../../server/knowledge");
+    const a = (await loadAssistant("utilmo"))!;
+    a.settings.seedVersionApplied = 0; // simulate a stale cache on another instance
+    expect(await bootstrapAssistant(a)).toBe(false);
+    const n = await one<{ n: number }>(`SELECT count(*)::int AS n FROM knowledge_sources WHERE type = 'seed'`);
+    expect(n!.n).toBe(1);
+  });
+});

@@ -23,8 +23,13 @@ export function selfHosts(req: Request): string[] {
  * rate limits and daily caps — it is never the only protection.
  */
 export function checkOrigin(req: Request, allowedDomains: string[]): { ok: boolean; origin: string | null } {
-  const origin = req.headers.get("origin");
-  if (!origin) return { ok: false, origin: null };
+  // Browsers omit Origin on same-origin GET requests: fall back to Referer, then Sec-Fetch-Site.
+  let origin = req.headers.get("origin");
+  if (!origin) {
+    const ref = req.headers.get("referer");
+    if (ref) { try { origin = new URL(ref).origin; } catch { /* ignore */ } }
+  }
+  if (!origin) return { ok: req.headers.get("sec-fetch-site") === "same-origin", origin: null };
   let host: string;
   try { host = new URL(origin).host; } catch { return { ok: false, origin }; }
   const hostname = host.split(":")[0];
