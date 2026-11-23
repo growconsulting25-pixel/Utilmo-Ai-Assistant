@@ -14,6 +14,22 @@ export const QUALIFICATION_FIELDS = [
   "budget_range", "demo_interest",
 ] as const;
 
+export const FLOW_STEP_KEYS = ["is_broker", "role", "brokerage", "main_goal", "name", "phone", "email"] as const;
+export type FlowStepKey = (typeof FLOW_STEP_KEYS)[number];
+
+const FlowStep = z.object({ key: z.enum(FLOW_STEP_KEYS), question: I18n, options: I18nList.default({ fr: [], en: [] }) });
+
+/** Default guided qualification flow (editable per assistant). {name} and {brokerage} are replaced. */
+export const DEFAULT_FLOW_STEPS: z.input<typeof FlowStep>[] = [
+  { key: "is_broker", question: { fr: "Êtes-vous courtier immobilier ?", en: "Are you a real estate broker?" }, options: { fr: ["Oui", "Non"], en: ["Yes", "No"] } },
+  { key: "role", question: { fr: "D'accord ! Vous êtes plutôt :", en: "Got it! Are you:" }, options: { fr: ["Une agence ou une équipe", "Déjà client Utilmo", "Autre"], en: ["An agency or team", "Already a Utilmo client", "Other"] } },
+  { key: "brokerage", question: { fr: "Avec quelle agence travaillez-vous ?", en: "Which brokerage are you with?" }, options: { fr: ["RE/MAX", "Royal LePage", "Sutton", "Via Capitale", "eXp", "Keller Williams", "Indépendant", "Autre"], en: ["RE/MAX", "Royal LePage", "Sutton", "Via Capitale", "eXp", "Keller Williams", "Independent", "Other"] } },
+  { key: "main_goal", question: { fr: "Qu'aimeriez-vous améliorer en priorité ?", en: "What would you like to improve first?" }, options: { fr: ["Générer plus de leads", "Améliorer ma visibilité", "Découvrir le CRM", "Automatiser mes suivis", "Créer mon site web"], en: ["Generate more leads", "Improve my visibility", "Discover the CRM", "Automate my follow-ups", "Build my website"] } },
+  { key: "name", question: { fr: "Pour vous préparer une proposition adaptée, quel est votre nom ?", en: "To prepare a tailored proposal, what's your name?" }, options: { fr: ["Je préfère ne pas"], en: ["I'd rather not"] } },
+  { key: "phone", question: { fr: "Merci {name} ! Quel est le meilleur numéro pour vous joindre ?", en: "Thanks {name}! What's the best number to reach you?" }, options: { fr: ["Je préfère ne pas"], en: ["I'd rather not"] } },
+  { key: "email", question: { fr: "Et votre courriel ?", en: "And your email?" }, options: { fr: ["Je préfère ne pas"], en: ["I'd rather not"] } },
+];
+
 export const SettingsSchema = z.object({
   behavior: z.object({
     assistantName: z.string().min(1).max(60).default("Assistant"),
@@ -37,6 +53,15 @@ export const SettingsSchema = z.object({
       salesPhone: z.string().default(""),
     }).prefault({}),
     extraInstructions: z.string().max(4000).default(""),
+  }).prefault({}),
+  guidedFlow: z.object({
+    enabled: z.boolean().default(true),
+    steps: z.array(FlowStep).min(1).default(DEFAULT_FLOW_STEPS as never),
+    completion: I18n.default({ fr: "Merci {name} ! Un conseiller vous contactera très bientôt. Vous pouvez aussi réserver une démo dès maintenant :", en: "Thanks {name}! An advisor will contact you very soon. You can also book a demo right now:" }),
+    refusalCompletion: I18n.default({ fr: "Aucun problème ! Vous pouvez réserver une démo quand vous voulez, ou me poser vos questions.", en: "No problem! You can book a demo anytime, or ask me your questions." }),
+    invalidPhone: I18n.default({ fr: "Ce numéro ne semble pas valide. Pouvez-vous le vérifier ? (ex. 514-555-0123)", en: "That number doesn't look valid. Could you check it? (e.g. 514-555-0123)" }),
+    invalidEmail: I18n.default({ fr: "Ce courriel ne semble pas valide. Pouvez-vous le vérifier ?", en: "That email doesn't look valid. Could you check it?" }),
+    supportPrompt: I18n.default({ fr: "D'accord ! Décrivez-moi brièvement votre question ou le problème rencontré.", en: "Sure! Briefly describe your question or the issue." }),
   }).prefault({}),
   ai: z.object({
     provider: z.enum(["anthropic", "openai"]).default("anthropic"),
@@ -116,8 +141,8 @@ export function publicSettings(s: AssistantSettings) {
     assistantName: s.behavior.assistantName,
     companyName: s.behavior.companyName,
     defaultLanguage: s.behavior.defaultLanguage,
-    welcome: s.behavior.welcome,
-    suggestions: s.behavior.suggestions,
+    welcome: s.guidedFlow.enabled ? { fr: `${s.behavior.welcome.fr}\n\n${s.guidedFlow.steps[0].question.fr}`.trim(), en: `${s.behavior.welcome.en}\n\n${s.guidedFlow.steps[0].question.en}`.trim() } : s.behavior.welcome,
+    suggestions: s.guidedFlow.enabled ? s.guidedFlow.steps[0].options : s.behavior.suggestions,
     booking: { enabled: s.booking.provider !== "none" && !!s.booking.url, url: s.booking.url, label: s.booking.label },
     appearance: s.appearance,
     privacy: { notice: s.privacy.notice, privacyPolicyUrl: s.privacy.privacyPolicyUrl, noticeVersion: s.privacy.noticeVersion, sessionRetentionDays: s.privacy.sessionRetentionDays },

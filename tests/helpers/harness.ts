@@ -21,7 +21,7 @@ export async function setupHarness(): Promise<{ db: Db; bg: Promise<unknown>[] }
 export async function chat(bg: Promise<unknown>[], message: string, token: string | null, extra: Record<string, unknown> = {}, origin = ORIGIN) {
   const clientMessageId = (extra.clientMessageId as string) ?? "m" + Math.random().toString(36).slice(2, 12) + Date.now();
   const req = new Request("http://localhost:8888/api/chat", { method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify({ assistantId: "utilmo", sessionToken: token, message, clientMessageId, ...extra }) });
-  const res = await handleChat(req, { ip: "10.0.0.1", waitUntil: (p) => bg.push(p) });
+  const res = await handleChat(req, { ip: `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`, waitUntil: (p) => bg.push(p) });
   const text = await res.text();
   const events: ChatStreamEvent[] = res.headers.get("content-type")?.includes("ndjson") ? text.trim().split("\n").map((l) => JSON.parse(l)) : [];
   await Promise.all(bg.splice(0));

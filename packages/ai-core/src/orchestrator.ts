@@ -4,7 +4,8 @@ import type { AssistantSettings } from "../../shared/src/settings";
 import { AnalysisSchema, ANALYZER_SYSTEM, analysisJsonSchema, analysisToUpdates, fallbackAnalysis, type Analysis } from "./analysis";
 import { detectLanguage, extractContact } from "./extraction";
 import { containsSensitiveSecret, looksLikeInjection, redactSecrets } from "./injection";
-import { decide, markAsked } from "./policy";
+import { decide, markAsked, type PolicyDecision } from "./policy";
+import { currentStep, fill, isOption, parseFlowAnswer, stepState, type FlowParse } from "./flow";
 import { hasContact, mergeProfile, profileForPrompt, val, type Profile, type ProfileUpdate } from "./profile";
 import { buildSystemPrompt, buildTurnContext, EVALUATOR_SYSTEM, evaluatorJsonSchema, type OpenConflict, type RetrievedChunk } from "./prompts";
 import { recommendServices, type Recommendation, type ServiceDef } from "./recommend";
@@ -92,7 +93,13 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   // 3) LLM analysis (structured, validated) with deterministic fallback.
   let analysis: Analysis;
   const fallbackLang = input.languageHint ?? conv.language ?? s.behavior.defaultLanguage;
-  try {
+  const askedStep = currentStep(conv.profile ?? {}, s);
+  const chipAnswer = isOption(askedStep, message);
+  if (chipAnswer) {
+    // Button answer in the guided flow: no LLM analysis needed (instant reply).
+    const lang = askedStep!.options.en.some((o) => o.toLowerCase() === message.trim().toLowerCase()) && !askedStep!.options.fr.some((o) => o.toLowerCase() === message.trim().toLowerCase()) ? "en" : (conv.language ?? fallbackLang);
+    analysis = { ...fallbackAnalysis(lang, message), intents: ["PROVIDE_INFO"], search_queries: [], wants_human: false };
+  } else try {
     const transcript = history.slice(-7, -1).map((m) => `${m.role === "user" ? "Visitor" : "Assistant"}: ${m.content.slice(0, 600)}`).join("\n");
     const res = await llm.json({
       model: s.ai.analysisModel, system: ANALYZER_SYSTEM, maxTokens: 900, timeoutMs: 15_000, schema: analysisJsonSchema(),
@@ -108,7 +115,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   }
   // Language: trust the analyser, but cross-check very short messages with the previous language.
   let language: "fr" | "en" = analysis.language;
-  if (message.trim().split(/\s+/).length <= 2 && !/[a-z]{4,}/i.test(message.replace(/@\S+/g, ""))) language = conv.language ?? fallbackLang;
+  if (!chipAnswer && message.trim().split(/\s+/).length <= 2 && !/[a-z]{4,}/i.test(message.replace(/@\S+/g, ""))) language = conv.language ?? fallbackLang;
   if (looksLikeInjection(message) && !analysis.intents.includes("PROMPT_INJECTION")) analysis.intents.push("PROMPT_INJECTION");
   if (hadSecret && !analysis.intents.includes("SENSITIVE_REQUEST")) analysis.intents.push("SENSITIVE_REQUEST");
   if (analysis.intents.length) void store.track("intent_detected", { intents: analysis.intents, categories: analysis.categories }, conv.id);
@@ -128,11 +135,26 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   if (analysis.clear_need) flags.clear_need = true;
   profile = { ...profile, flags };
 
+  // 4b) Guided flow: interpret the answer to the step that was asked.
+  const securityTurn = analysis.intents.includes("PROMPT_INJECTION") || analysis.intents.includes("SENSITIVE_REQUEST");
+  let flowParse: FlowParse | null = null;
+  if (askedStep && !securityTurn) {
+    flowParse = parseFlowAnswer(askedStep, message);
+    profile = mergeProfile(profile, flowParse.updates).profile;
+    const ff = flowParse.flags;
+    profile.flags = { ...(profile.flags ?? {}), ...ff };
+    if (ff.commercial_intent && rank[ff.commercial_intent] > rank[profile.flags.commercial_intent ?? "none"]) profile.flags.commercial_intent = ff.commercial_intent;
+  }
+
   // 5) Retrieval (RAG): only what is relevant for this turn.
-  const supportMode = analysis.intents.includes("SUPPORT_REQUEST") || (val(profile, "existing_customer") === "yes" && (analysis.categories.includes("CUSTOMER_SUPPORT") || !!analysis.support_category));
-  const security = analysis.intents.includes("PROMPT_INJECTION") || analysis.intents.includes("SENSITIVE_REQUEST");
+  const supportMode = !!profile.flags?.support_mode || analysis.intents.includes("SUPPORT_REQUEST") || (val(profile, "existing_customer") === "yes" && (analysis.categories.includes("CUSTOMER_SUPPORT") || !!analysis.support_category));
+  const security = securityTurn;
+  const isQuestion = !chipAnswer && (message.includes("?") || analysis.intents.some((i) => ["PRODUCT_QUESTION", "PRICING_QUESTION", "INTEGRATION_QUESTION"].includes(i)));
+  const justEnteredSupport = !!flowParse?.flags.support_mode;
+  const flowActive = s.guidedFlow.enabled && profile.flags?.flow_step !== "done" && !security && !analysis.wants_human && (!supportMode || justEnteredSupport);
+  const nextStep = flowActive ? currentStep(profile, s) : null;
   let chunks: RetrievedChunk[] = [];
-  if (!security) {
+  if (!security && (!flowActive || isQuestion)) {
     const queries = Array.from(new Set([...analysis.search_queries, message.slice(0, 300)])).filter((q) => q.trim().length > 1);
     try {
       chunks = await deps.search(queries, { collection: supportMode ? "support" : "sales", topK: s.ai.retrievalTopK });
@@ -142,12 +164,30 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
 
   // 6) Deterministic policy / state machine.
   const bookingAvailable = s.booking.provider !== "none" && !!s.booking.url;
-  const decision = decide({
-    previousState: conv.state, analysis, profile, settings: s, userTurns,
-    unresolvedCount: conv.unresolvedCount, knowledgeHits: supportMode ? supportDocHits : chunks.length,
-    bookingAvailable, ticketAlreadyCreated: conv.escalationStatus === "ticket_created", contactJustProvided: volunteeredContact,
-  });
-  profile = markAsked(profile, decision.askField);
+  let decision: PolicyDecision;
+  if (flowActive) {
+    const done = !nextStep && !justEnteredSupport;
+    decision = {
+      state: justEnteredSupport ? "EXISTING_CUSTOMER_SUPPORT" : stepState(nextStep?.key ?? null), askField: null, createTicket: false, handoff: false, saveLead: true,
+      offerBooking: done && bookingAvailable,
+      guidance: ["Answer ONLY the visitor's question, in at most 2 short sentences (max 45 words). Do NOT ask any question and do not ask for contact details: the application asks the next step itself right after your answer."],
+      suggestions: nextStep && !justEnteredSupport ? { fr: nextStep.options.fr, en: nextStep.options.en } : { fr: [], en: [] },
+    };
+    profile.flags = { ...(profile.flags ?? {}), flow_step: justEnteredSupport ? "done" : (nextStep?.key ?? "done") };
+  } else {
+    decision = decide({
+      previousState: conv.state, analysis, profile, settings: s, userTurns,
+      unresolvedCount: conv.unresolvedCount, knowledgeHits: supportMode ? supportDocHits : chunks.length,
+      bookingAvailable, ticketAlreadyCreated: conv.escalationStatus === "ticket_created", contactJustProvided: volunteeredContact,
+    });
+    if (s.guidedFlow.enabled && profile.flags?.flow_step === "done" && !supportMode && !decision.handoff && ["first_name", "phone", "email", "brokerage", "main_goal"].every((k) => k !== decision.askField || true)) {
+      // Flow already collected what matters: keep answers short, no further interrogation.
+      decision.askField = null;
+      decision.guidance = decision.guidance.filter((g) => !/ask ONE question|single missing/.test(g));
+      decision.guidance.push("Do not ask further qualification questions. Keep it to 1-3 short sentences.");
+    }
+    profile = markAsked(profile, decision.askField);
+  }
 
   // 7) Recommendations (sales only).
   const turnCats = analysis.categories.filter((c) => c !== "GENERAL_INFORMATION") as InterestCategory[];
@@ -173,7 +213,28 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   let usage: LLMUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   let model = s.ai.responseModel;
   let firstTokenMs = 0;
-  try {
+  // Deterministic text for the guided flow (next question, acknowledgement, completion).
+  let flowText = "";
+  if (flowActive) {
+    const gf = s.guidedFlow;
+    if (flowParse?.invalid && askedStep) flowText = (flowParse.invalid === "phone" ? gf.invalidPhone : gf.invalidEmail)[language];
+    else if (justEnteredSupport) flowText = gf.supportPrompt[language];
+    else if (!nextStep) flowText = fill((profile.flags?.contact_refused ? gf.refusalCompletion : gf.completion)[language], profile);
+    else {
+      let ack = "";
+      if (!isQuestion && flowParse?.answered) {
+        if (askedStep?.key === "main_goal" && recs[0]) ack = recs[0].why;
+        else if (askedStep?.key === "is_broker" || askedStep?.key === "brokerage" || askedStep?.key === "role") ack = language === "fr" ? "Parfait !" : "Great!";
+      }
+      flowText = [ack, fill(nextStep.question[language], profile)].filter(Boolean).join(" ");
+    }
+    if (flowParse?.invalid && askedStep) decision.suggestions = { fr: askedStep.options.fr, en: askedStep.options.en };
+  }
+  if (flowActive && !isQuestion) {
+    replyText = flowText;
+    model = "deterministic-flow";
+    emit({ type: "delta", text: replyText });
+  } else try {
     const r = await llm.stream({ model: s.ai.responseModel, system: buildSystemPrompt(s), messages: msgs, maxTokens: s.ai.maxOutputTokens, effort: s.ai.effort, timeoutMs: 45_000 }, (d) => {
       if (!firstTokenMs) firstTokenMs = Date.now() - t0;
       replyText += d;
@@ -182,6 +243,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     usage = r.usage; model = r.model;
     if (r.stopReason === "refusal") { replyText = REFUSAL_REPLY[language]; emit({ type: "replace", text: replyText }); }
     else if (!r.text.trim()) throw new Error("empty_reply");
+    if (flowActive && flowText) { const add = "\n\n" + flowText; replyText += add; emit({ type: "delta", text: add }); }
   } catch (err) {
     log("generation_failed", { error: String(err).slice(0, 300) });
     // Nothing persisted for the assistant: the client can retry with the same clientMessageId.

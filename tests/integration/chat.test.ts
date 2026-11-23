@@ -25,31 +25,76 @@ describe("knowledge bootstrap & retrieval", () => {
   });
 });
 
-describe("sales conversation → structured lead (scenarios 1 & 11)", () => {
-  it("discovers needs, captures contact in one message, saves and scores the lead", async () => {
-    let r = await chat(bg, "J'aimerais savoir si vous pouvez m'aider à obtenir plus de vendeurs.", null);
+describe("guided flow → structured lead (scenarios 1 & 11)", () => {
+  const sugg = (r: Awaited<ReturnType<typeof chat>>) => (r.actions.find((a) => a.type === "suggestions") as { items?: string[] } | undefined)?.items ?? [];
+  it("broker? → agency → priority → name → phone → email, short deterministic replies", async () => {
+    let r = await chat(bg, "Oui", null);
     const token = r.token!;
-    expect(r.done?.language).toBe("fr");
-    expect(r.reply).toMatch(/ASK\[/);
-    r = await chat(bg, "Je suis courtier, je veux plus de leads vendeurs à Longueuil et Brossard.", token);
-    expect(r.reply).not.toMatch(/ASK\[which city/);
-    r = await chat(bg, "On part de zéro, aucune campagne. J'aimerais commencer dans 30 jours.", token);
-    r = await chat(bg, "Je m'appelle Jean Tremblay, 514-555-0123, jean.tremblay@example.com", token);
+    expect(r.reply).toMatch(/quelle agence/i);
+    expect(sugg(r)).toContain("RE/MAX");
+    r = await chat(bg, "RE/MAX", token);
+    expect(r.reply).toMatch(/améliorer en priorité/);
+    expect(sugg(r)).toContain("Générer plus de leads");
+    r = await chat(bg, "Générer plus de leads", token);
+    expect(r.reply).toMatch(/quel est votre nom/);
+    expect(r.reply.length).toBeLessThan(260);
+    r = await chat(bg, "Jean Tremblay", token);
+    expect(r.reply).toMatch(/Merci Jean !.*numéro/);
+    r = await chat(bg, "514-555-0123", token);
+    expect(r.reply).toMatch(/courriel/);
     expect(r.actions.some((a) => a.type === "contact_saved")).toBe(true);
+    r = await chat(bg, "jean.tremblay@example.com", token);
+    expect(r.reply).toMatch(/Merci Jean ! Un conseiller/);
+    expect(r.actions.some((a) => a.type === "booking")).toBe(true);
     const lead = await one<Record<string, any>>(`SELECT * FROM leads WHERE email_normalized = 'jean.tremblay@example.com'`);
-    expect(lead).toBeTruthy();
     expect(lead!.phone_e164).toBe("+15145550123");
     expect(lead!.first_name).toBe("Jean");
     expect(lead!.last_name).toBe("Tremblay");
-    expect(lead!.territory).toEqual(expect.arrayContaining(["Longueuil", "Brossard"]));
+    expect(lead!.brokerage).toBe("RE/MAX");
+    expect(lead!.user_type).toBe("broker");
     expect(lead!.services_interest).toContain("LEAD_GENERATION");
-    expect(lead!.score).toBeGreaterThan(40);
+    expect(lead!.qualification.main_goal).toBe("Générer plus de leads");
+    expect(lead!.status).toBe("qualified");
     expect(lead!.consent.privacy_notice_acknowledged).toBe(true);
-    const scores = await many(`SELECT * FROM lead_scores WHERE lead_id = $1`, [lead!.id]);
-    expect(scores.length).toBeGreaterThan(0);
-    // Never asks for contact details already known.
+    // After the flow: no more interrogation.
     r = await chat(bg, "Super, merci !", token);
-    expect(r.reply).not.toMatch(/ASK\[(their full name|the best phone|their e-mail)/);
+    expect(r.reply).not.toMatch(/ASK\[/);
+  });
+
+  it("answers a question briefly mid-flow, then resumes the flow", async () => {
+    const r = await chat(bg, "Oui, et combien coûte le CRM ?", null);
+    expect(r.reply).toMatch(/TEST DOUBLE/);
+    expect(r.reply).toMatch(/quelle agence/i);
+  });
+
+  it("respects 'rather not' for contact details and still offers the demo", async () => {
+    let r = await chat(bg, "Oui", null);
+    r = await chat(bg, "Sutton", r.token);
+    r = await chat(bg, "Créer mon site web", r.token);
+    r = await chat(bg, "Je préfère ne pas", r.token);
+    expect(r.reply).toMatch(/Aucun problème/);
+    expect(r.actions.some((a) => a.type === "booking")).toBe(true);
+  });
+
+  it("re-asks an invalid phone number", async () => {
+    let r = await chat(bg, "Oui", null);
+    r = await chat(bg, "Via Capitale", r.token);
+    r = await chat(bg, "Découvrir le CRM", r.token);
+    r = await chat(bg, "Marc Roy", r.token);
+    r = await chat(bg, "555-12", r.token);
+    expect(r.reply).toMatch(/ne semble pas valide/);
+  });
+
+  it("routes 'Non → Déjà client Utilmo' to support", async () => {
+    let r = await chat(bg, "Non", null);
+    expect(r.reply).toMatch(/Vous êtes plutôt/);
+    r = await chat(bg, "Déjà client Utilmo", r.token);
+    expect(r.reply).toMatch(/Décrivez-moi/);
+  });
+
+  it("accepts all contact details in one message", async () => {
+    const r = await chat(bg, "Je veux une démo. Je m'appelle Luc Gagnon, 438-555-0177, luc.gagnon@example.com", null);
+    expect(r.actions.some((a) => a.type === "contact_saved")).toBe(true);
   });
 
   it("deduplicates leads by verified e-mail across conversations", async () => {

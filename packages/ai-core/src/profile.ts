@@ -26,6 +26,7 @@ export interface Profile {
     commercial_intent?: "none" | "low" | "medium" | "high"; clear_need?: boolean;
     asked_fields?: Record<string, number>; // field -> times asked (prevents repetition)
     privacy_notice_version?: string;
+    flow_step?: string; not_broker?: boolean; flow_skipped?: string[]; support_mode?: boolean;
   };
 }
 

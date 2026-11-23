@@ -29,40 +29,42 @@ try {
   const inline = page.locator("[data-utilmo-ai=inline] .u-inline");
   const panel = page.locator("[data-utilmo-ai=floating] .u-panel");
 
-  await test("inline chat renders greeting and 6 suggestion chips", async () => {
+  await test("inline chat renders greeting with 'Êtes-vous courtier immobilier ?' and Oui/Non chips", async () => {
     await inline.locator(".u-welcome .u-bubble").waitFor({ timeout: 10000 });
     const t = await inline.locator(".u-welcome .u-bubble").innerText();
     expect(t.includes("Bienvenue chez Utilmo"), "greeting missing: " + t);
-    expect((await inline.locator(".u-welcome .u-suggestion").count()) === 6, "expected 6 suggestions");
+    expect(t.includes("courtier immobilier"), "first flow question missing");
+    expect((await inline.locator(".u-welcome .u-suggestion").count()) === 2, "expected Oui/Non");
   });
   await page.screenshot({ path: `${shots}/01-desktop-inline.png` });
 
-  await test("clicking a suggestion continues the conversation (streamed reply)", async () => {
-    await inline.locator(".u-suggestion", { hasText: "Générer plus de leads" }).click();
-    await inline.locator(".u-row-user", { hasText: "Générer plus de leads" }).waitFor();
-    await inline.locator(".u-row-bot .u-bubble", { hasText: "TEST DOUBLE" }).first().waitFor({ timeout: 15000 });
+  await test("guided flow: Oui → agency chips → priority chips (instant, deterministic)", async () => {
+    await inline.locator(".u-suggestion", { hasText: "Oui" }).click();
+    await inline.locator(".u-row-bot .u-bubble", { hasText: "Avec quelle agence" }).waitFor({ timeout: 15000 });
+    await inline.locator(".u-suggestion", { hasText: "RE/MAX" }).click();
+    await inline.locator(".u-row-bot .u-bubble", { hasText: "améliorer en priorité" }).waitFor({ timeout: 15000 });
     expect((await inline.locator(".u-welcome .u-suggestion").count()) === 0, "starter chips should hide after first message");
   });
 
   await test("typing in the inline composer and Enter sends", async () => {
     await inline.locator("textarea").fill("Je travaille à Longueuil et Brossard.");
     await inline.locator("textarea").press("Enter");
-    await page.waitForFunction(() => document.querySelector("[data-utilmo-ai=inline]").shadowRoot.querySelectorAll(".u-row-bot:not(.u-welcome)").length >= 2 && !document.querySelector("[data-utilmo-ai=inline]").shadowRoot.querySelector(".u-typing"), null, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector("[data-utilmo-ai=inline]").shadowRoot.querySelectorAll(".u-row-bot:not(.u-welcome)").length >= 3 && !document.querySelector("[data-utilmo-ai=inline]").shadowRoot.querySelector(".u-typing"), null, { timeout: 15000 });
   });
 
   await test("floating widget opens and shows the SAME conversation (scenario 17)", async () => {
     await page.locator("[data-utilmo-ai=floating] .u-launcher").click();
     await panel.waitFor();
     const n = await panel.locator(".u-row-user").count();
-    expect(n === 2, `floating shows ${n} user messages, expected 2`);
+    expect(n === 3, `floating shows ${n} user messages, expected 3`);
   });
 
   await test("message sent from floating appears in inline too; no duplicate reply", async () => {
     await panel.locator("textarea").fill("Combien coûte le CRM ?");
     await panel.locator(".u-send").click();
-    await page.waitForFunction(() => { const r = document.querySelector("[data-utilmo-ai=floating]").shadowRoot; return r.querySelectorAll(".u-row-user").length === 3 && !r.querySelector(".u-typing") && !r.querySelector(".u-streaming"); }, null, { timeout: 15000 });
-    expect((await inline.locator(".u-row-user").count()) === 3, "inline not in sync");
-    expect((await inline.locator(".u-row-bot:not(.u-welcome)").count()) === 3, "unexpected number of replies");
+    await page.waitForFunction(() => { const r = document.querySelector("[data-utilmo-ai=floating]").shadowRoot; return r.querySelectorAll(".u-row-user").length === 4 && !r.querySelector(".u-typing") && !r.querySelector(".u-streaming"); }, null, { timeout: 15000 });
+    expect((await inline.locator(".u-row-user").count()) === 4, "inline not in sync");
+    expect((await inline.locator(".u-row-bot:not(.u-welcome)").count()) === 4, "unexpected number of replies");
   });
   await page.screenshot({ path: `${shots}/02-desktop-both.png` });
 
@@ -76,8 +78,8 @@ try {
 
   await test("conversation persists after page reload (scenario 18)", async () => {
     await page.reload();
-    await inline.locator(".u-row-user").nth(2).waitFor({ timeout: 10000 });
-    expect((await inline.locator(".u-row-user").count()) === 3, "history not restored");
+    await inline.locator(".u-row-user").nth(3).waitFor({ timeout: 10000 });
+    expect((await inline.locator(".u-row-user").count()) === 4, "history not restored");
   });
 
   await test("accessible names: launcher, send button, log region", async () => {
@@ -96,7 +98,7 @@ try {
     await inline.locator(".u-menu-wrap .u-icon-btn").click();
     await inline.locator(".u-menu button", { hasText: "Nouvelle conversation" }).click();
     expect((await inline.locator(".u-row-user").count()) === 0, "not reset");
-    expect((await inline.locator(".u-welcome .u-suggestion").count()) === 6, "suggestions not back");
+    expect((await inline.locator(".u-welcome .u-suggestion").count()) === 2, "suggestions not back");
   });
 
   // Mobile
