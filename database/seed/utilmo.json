@@ -30,7 +30,7 @@
     "appearance": {
       "primaryColor": "#4c2b7b", "accentColor": "#f47421", "backgroundColor": "#ffffff", "textColor": "#1d2124",
       "radius": 20, "fontFamily": "Montserrat", "headingFontFamily": "Poppins", "loadGoogleFonts": true,
-      "logoUrl": "/brand/utilmo-logo_2024.png", "avatarUrl": "/brand/utilmo-icon.png",
+      "logoUrl": "/brand/utilmo-logo_2024.png", "avatarUrl": "/brand/utilmo-bot.png",
       "launcherPosition": "right", "launcherStyle": "circle", "attentionAnimation": true,
       "teaser": { "enabled": true, "delaySeconds": 8, "text": { "fr": "Une question sur Utilmo ? Je suis là pour vous aider.", "en": "Questions about Utilmo? I'm here to help." } },
       "inlineHeight": 620, "mobileFullscreen": true

@@ -21,7 +21,7 @@ export function Avatar({ store, size = 36 }: { store: WidgetStore; size?: number
   const src = assetUrl(store, s?.appearance.avatarUrl ?? "");
   return (
     <span class="u-avatar" style={{ width: size, height: size }} aria-hidden="true">
-      {src ? <img src={src} alt="" width={size * 0.62} height={size * 0.62} /> : <span>{(s?.assistantName ?? "A").slice(0, 1)}</span>}
+      {src ? <img src={src} alt="" width={size * 0.9} height={size * 0.9} /> : <span>{(s?.assistantName ?? "A").slice(0, 1)}</span>}
     </span>
   );
 }

@@ -10,7 +10,7 @@ button:disabled { cursor: not-allowed; }
 
 /* ---------- shared header ---------- */
 .u-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px 14px 18px; border-bottom: 1px solid var(--u-line); background: var(--u-bg); flex: 0 0 auto; }
-.u-avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--u-soft); border: 1px solid var(--u-line); flex: 0 0 auto; overflow: hidden; color: var(--u-primary); font-weight: 700; }
+.u-avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #fff; border: 1px solid var(--u-line); flex: 0 0 auto; overflow: hidden; color: var(--u-primary); font-weight: 700; }
 .u-avatar img { object-fit: contain; display: block; }
 .u-header-text { flex: 1 1 auto; min-width: 0; }
 .u-title { font-family: var(--u-heading); font-weight: 600; font-size: 15px; color: var(--u-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -85,6 +85,9 @@ button:disabled { cursor: not-allowed; }
 .u-floating.u-right { right: 20px; } .u-floating.u-left { left: 20px; align-items: flex-start; }
 .u-launcher { position: relative; height: 60px; min-width: 60px; border: 0; border-radius: 999px; background: var(--u-primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: var(--u-shadow); transition: transform .18s, box-shadow .18s; }
 .u-launcher-pill { padding: 0 20px; font-weight: 600; }
+.u-launcher-avatar { background: #fff; border: 2px solid color-mix(in srgb, var(--u-primary) 25%, #fff); height: 68px; min-width: 68px; }
+.u-launcher-avatar.u-launcher-pill { color: var(--u-primary); }
+.u-launcher-img { width: 54px; height: 54px; object-fit: contain; display: block; }
 .u-launcher:hover { transform: translateY(-2px) scale(1.03); }
 .u-attention::before { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 0 color-mix(in srgb, var(--u-primary) 45%, transparent); animation: u-pulse 2.6s 1.5s 3 ease-out; }
 .u-badge { position: absolute; top: -3px; right: -3px; min-width: 21px; height: 21px; padding: 0 6px; border-radius: 999px; background: var(--u-accent); color: #fff; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 2px solid #fff; }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { STRINGS } from "../i18n";
 import type { WidgetStore } from "../store";
-import { Composer, Conversation, Header, useStore } from "./Chat";
+import { assetUrl, Composer, Conversation, Header, useStore } from "./Chat";
 import { IconChat, IconMinus, IconX } from "./icons";
 
 export function Floating({ store }: { store: WidgetStore }) {
@@ -53,9 +53,9 @@ export function Floating({ store }: { store: WidgetStore }) {
           <button type="button" class="u-teaser-x" aria-label={t.dismiss} onClick={dismissTeaser}><IconX /></button>
         </div>
       )}
-      <button ref={launcherRef} type="button" class={`u-launcher u-launcher-${s.appearance.launcherStyle}${s.appearance.attentionAnimation && !open && !state.messages.length ? " u-attention" : ""}`}
+      <button ref={launcherRef} type="button" class={`u-launcher u-launcher-${s.appearance.launcherStyle}${s.appearance.avatarUrl && !open ? " u-launcher-avatar" : ""}${s.appearance.attentionAnimation && !open && !state.messages.length ? " u-attention" : ""}`}
         aria-label={open ? t.closeChat : t.openChat} aria-expanded={open} onClick={() => store.setFloatingOpen(!open)}>
-        {open ? <IconMinus /> : <IconChat />}
+        {open ? <IconMinus /> : s.appearance.avatarUrl ? <img class="u-launcher-img" src={assetUrl(store, s.appearance.avatarUrl)} alt="" /> : <IconChat />}
         {s.appearance.launcherStyle === "pill" && !open && <span class="u-launcher-label">{s.appearance.launcherLabel[state.language]}</span>}
         {!open && state.unread > 0 && <span class="u-badge" aria-label={t.unread(state.unread)}>{state.unread}</span>}
       </button>
