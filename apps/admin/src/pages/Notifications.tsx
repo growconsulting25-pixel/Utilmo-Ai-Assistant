@@ -39,7 +39,7 @@ export function Notifications({ role }: { role: string }) {
       setSecret("");
       if (thenTest) {
         const r = await api(`/integrations/${id}/test`, { method: "POST" });
-        setToast(r.result === "success" ? L("Courriel test envoyé ✔ Vérifiez les boîtes de réception.", "Test email sent ✔ Check the inboxes.") : L(`Échec de l'envoi : ${r.delivery?.last_error ?? r.result}`, `Sending failed: ${r.delivery?.last_error ?? r.result}`));
+        setToast(r.result === "success" ? (f.enabled ? L("Courriel test envoyé ✔ Vérifiez les boîtes de réception.", "Test email sent ✔ Check the inboxes.") : L("Courriel test envoyé ✔ Cochez « Notifications activées » puis Enregistrer pour recevoir les vraies alertes.", "Test email sent ✔ Tick “Notifications enabled” and Save to receive real alerts.")) : L(`Échec de l'envoi : ${r.delivery?.last_error ?? r.result}`, `Sending failed: ${r.delivery?.last_error ?? r.result}`));
       } else setToast(L("Notifications enregistrées", "Notifications saved"));
       reload();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -56,6 +56,7 @@ export function Notifications({ role }: { role: string }) {
           <Field label={L("Événements", "Events")}><div className="space-y-2">{EVENTS.map(([k, fr, en]) => (
             <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!admin} checked={f.events.includes(k)} onChange={(e) => setF({ ...f, events: e.target.checked ? [...f.events, k] : f.events.filter((x: string) => x !== k) })} />{L(fr, en)}</label>))}</div></Field>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" disabled={!admin} checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} />{L("Notifications activées", "Notifications enabled")}</label>
+          {configured && !f.enabled && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{L("Les notifications sont désactivées : cochez « Notifications activées » puis Enregistrer.", "Notifications are disabled: tick “Notifications enabled” then Save.")}</div>}
           {!configured && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{L("Configurez l'expéditeur (à droite) pour que les courriels partent.", "Configure the sender (right) so emails can be sent.")}</div>}
         </div>
         <div className="card space-y-4 p-5">

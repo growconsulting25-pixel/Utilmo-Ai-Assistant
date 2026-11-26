@@ -168,7 +168,7 @@ export async function attemptDelivery(deliveryId: string): Promise<"success" | "
   const leadId = ((d.payload.lead as Record<string, unknown> | undefined)?.id ?? d.payload.lead_id) as string | undefined;
   let status = 0, body = "", error: string | null = null;
   try {
-    if (!it || !it.enabled) throw new Error("integration disabled");
+    if (!it || (!it.enabled && d.event !== "test.ping")) throw new Error("integration disabled");
     ({ status, body } = await send(it, d));
     if ((status < 200 || status >= 300) && status !== 250) error = `HTTP ${status}`;
   } catch (e) { error = (e as Error).message?.slice(0, 300) ?? "error"; }
