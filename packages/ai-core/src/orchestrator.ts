@@ -201,7 +201,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     const done = !nextStep && !justEnteredSupport;
     decision = {
       state: justEnteredSupport ? "EXISTING_CUSTOMER_SUPPORT" : stepState(nextStep?.key ?? null), askField: null, createTicket: false, handoff: false, saveLead: true,
-      offerBooking: done && bookingAvailable,
+      // Explicit demo request during the flow: show the booking card right away (the flow continues).
+      offerBooking: bookingAvailable && (done || analysis.intents.includes("BOOKING_REQUEST") || analysis.demo_interest === "yes"),
       guidance: ["Answer ONLY the visitor's question, very briefly: one short line, then if listing options use 2-4 bullet points of 2-6 words each (e.g. '- Publicité Meta'). Max 30 words total. Bold the key term. No links, no 'more details here'. If the exact answer (e.g. a price) is not in the sources, just say an advisor will prepare a tailored proposal. Do NOT ask any question: the application asks the next step itself."],
       suggestions: nextStep && !justEnteredSupport ? { fr: nextStep.options.fr, en: nextStep.options.en } : { fr: [], en: [] },
     };

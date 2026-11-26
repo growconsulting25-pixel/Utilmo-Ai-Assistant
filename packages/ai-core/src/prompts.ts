@@ -102,6 +102,9 @@ export function buildTurnContext(t: TurnContextInput): string {
   if (t.showBookingCard) parts.push("A booking button will be displayed under your reply automatically; refer to it instead of writing the URL.");
   else if (!t.bookingAvailable) parts.push("No online booking link is configured.");
   parts.push(`Instructions for this turn:\n${t.guidance.map((g) => `- ${g}`).join("\n")}`);
+  parts.push(t.language === "en"
+    ? "IMPORTANT: The visitor writes in English. Write your ENTIRE reply in English, even if the sources are in French (translate facts faithfully)."
+    : "IMPORTANT : rédigez TOUTE votre réponse en français canadien.");
   return parts.join("\n\n");
 }
 
