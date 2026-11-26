@@ -1,15 +1,16 @@
 import { useState } from "react";
+import { getLang, tr } from "../i18n";
 import { api } from "../api";
 import type { Me } from "../main";
 import { ErrorBox, Field, ImagePicker, PageHeader, Toast } from "../ui";
 
 const T = {
-  fr: { title: "Mon profil", sub: "Vos informations personnelles et vos préférences.", name: "Nom", photo: "Photo de profil", upload: "Téléverser une photo", lang: "Langue de l'interface", save: "Enregistrer", saved: "Profil enregistré", pw: "Mot de passe", current: "Mot de passe actuel", next: "Nouveau mot de passe", change: "Changer le mot de passe", changed: "Mot de passe modifié", hint: "12 caractères min., majuscule, minuscule et chiffre.", email: "Courriel", role: "Rôle" },
+  fr: { title: tr("Mon profil"), sub: tr("Vos informations personnelles et vos préférences."), name: tr("Nom"), photo: "Photo de profil", upload: tr("Téléverser une photo"), lang: "Langue de l'interface", save: tr("Enregistrer"), saved: tr("Profil enregistré"), pw: tr("Mot de passe"), current: "Mot de passe actuel", next: tr("Nouveau mot de passe"), change: tr("Changer le mot de passe"), changed: tr("Mot de passe modifié"), hint: tr("12 caractères min., majuscule, minuscule et chiffre."), email: tr("Courriel"), role: tr("Rôle") },
   en: { title: "My profile", sub: "Your personal information and preferences.", name: "Name", photo: "Profile photo", upload: "Upload a photo", lang: "Interface language", save: "Save", saved: "Profile saved", pw: "Password", current: "Current password", next: "New password", change: "Change password", changed: "Password changed", hint: "12+ characters, upper and lower case and a digit.", email: "Email", role: "Role" },
 };
 
 export function Profile({ me, onSaved }: { me: Me; onSaved: () => void }) {
-  const lang = me.user.ui_language === "en" ? "en" : "fr";
+  const lang = getLang();
   const t = T[lang];
   const [name, setName] = useState(me.user.name ?? "");
   const [avatar, setAvatar] = useState(me.user.avatar ?? "");
