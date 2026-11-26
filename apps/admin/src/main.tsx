@@ -1,6 +1,6 @@
 import React, { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BarChart3, BookOpen, Code2, LifeBuoy, LogOut, MessagesSquare, Plug, ScrollText, Settings, Sparkles, Users, UserRound, Menu } from "lucide-react";
+import { BarChart3, BookOpen, UserCog, Code2, LifeBuoy, LogOut, MessagesSquare, Plug, ScrollText, Settings, Sparkles, Users, UserRound, Menu } from "lucide-react";
 import "./index.css";
 import { api, getAssistant, setAssistant } from "./api";
 import { Login } from "./pages/Login";
@@ -15,8 +15,9 @@ import { SettingsPage } from "./pages/Settings";
 import { Embed } from "./pages/Embed";
 import { UsersPage } from "./pages/Users";
 import { Audit } from "./pages/Audit";
+import { Profile } from "./pages/Profile";
 
-export interface Me { user: { id: string; email: string; role: "owner" | "admin" | "editor" | "viewer" }; organization: { name: string; slug: string } }
+export interface Me { user: { id: string; email: string; role: "owner" | "admin" | "editor" | "viewer"; name?: string | null; avatar?: string | null; ui_language?: "fr" | "en" }; organization: { name: string; slug: string } }
 
 const NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: BarChart3 },
@@ -30,7 +31,9 @@ const NAV = [
   { id: "embed", label: "Intégration du widget", icon: Code2 },
   { id: "users", label: "Utilisateurs", icon: Users, minRole: "admin" },
   { id: "audit", label: "Journal d'audit", icon: ScrollText, minRole: "admin" },
+  { id: "profile", label: "Mon profil", icon: UserCog },
 ] as const;
+const NAV_EN: Record<string, string> = { dashboard: "Dashboard", conversations: "Conversations", leads: "Leads", knowledge: "Knowledge base", services: "Recommendations", tickets: "Support", integrations: "Integrations", settings: "Behavior & appearance", embed: "Widget embed", users: "Users", audit: "Audit log", profile: "My profile" };
 const RANK = { viewer: 1, editor: 2, admin: 3, owner: 4 };
 
 function useHash() {
@@ -66,6 +69,7 @@ function App() {
     dashboard: <Dashboard />, conversations: <Conversations id={rest[0]} role={role} />, leads: <Leads id={rest[0]} role={role} />,
     knowledge: <Knowledge tab={rest[0]} role={role} />, services: <Services role={role} />, tickets: <Tickets role={role} />,
     integrations: <Integrations role={role} />, settings: <SettingsPage role={role} />, embed: <Embed />, users: <UsersPage me={me} />, audit: <Audit />,
+    profile: <Profile me={me} onSaved={loadMe} />,
   };
   const changePassword = async () => {
     const current = prompt("Mot de passe actuel"); if (!current) return;
@@ -87,15 +91,17 @@ function App() {
           {nav.map((n) => (
             <a key={n.id} href={`#/${n.id}`} onClick={() => setMobileNav(false)} aria-current={page === n.id ? "page" : undefined}
               className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${page === n.id ? "bg-brand/10 text-brand" : "text-slate-600 hover:bg-slate-100"}`}>
-              <n.icon size={17} />{n.label}
+              <n.icon size={17} />{me.user.ui_language === "en" ? NAV_EN[n.id] : n.label}
             </a>
           ))}
         </nav>
         <div className="border-t border-slate-200 p-4 text-xs text-slate-500">
-          <div className="truncate font-semibold text-slate-700">{me.user.email}</div>
+          <a href="#/profile" className="mb-2 flex items-center gap-2">
+            {me.user.avatar ? <img src={me.user.avatar} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 font-semibold text-brand">{(me.user.name || me.user.email).slice(0, 1).toUpperCase()}</span>}
+            <span className="min-w-0"><span className="block truncate font-semibold text-slate-700">{me.user.name || me.user.email}</span>{me.user.name && <span className="block truncate">{me.user.email}</span>}</span>
+          </a>
           <div>{me.organization?.name} · {role}</div>
-          <button className="mt-3 block text-slate-600 hover:text-brand" onClick={changePassword}>Changer mon mot de passe</button>
-          <button className="mt-2 inline-flex items-center gap-1.5 text-slate-600 hover:text-brand" onClick={logout}><LogOut size={14} /> Déconnexion</button>
+          <button className="mt-2 inline-flex items-center gap-1.5 text-slate-600 hover:text-brand" onClick={logout}><LogOut size={14} /> {me.user.ui_language === "en" ? "Log out" : "Déconnexion"}</button>
         </div>
       </aside>
       <main className="min-w-0 flex-1">

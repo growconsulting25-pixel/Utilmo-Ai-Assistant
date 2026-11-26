@@ -90,7 +90,7 @@ describe("guided flow → structured lead (scenarios 1 & 11)", () => {
     let r = await chat(bg, "Non", null);
     expect(r.reply).toMatch(/Vous êtes plutôt/);
     r = await chat(bg, "Déjà client Utilmo", r.token);
-    expect(r.reply).toMatch(/Décrivez-moi/);
+    expect(r.reply).toMatch(/sujet de votre demande/);
   });
 
   it("accepts all contact details in one message", async () => {
@@ -239,5 +239,41 @@ describe("bootstrap idempotency", () => {
     expect(await bootstrapAssistant(a)).toBe(false);
     const n = await one<{ n: number }>(`SELECT count(*)::int AS n FROM knowledge_sources WHERE type = 'seed'`);
     expect(n!.n).toBe(1);
+  });
+});
+
+describe("support funnel → ticket in admin 'Soutien'", () => {
+  it("Non → Déjà client → category → issue → name → email → ticket with reference", async () => {
+    let r = await chat(bg, "Non", null);
+    r = await chat(bg, "Déjà client Utilmo", r.token);
+    expect(r.reply).toMatch(/sujet de votre demande/);
+    expect((r.actions.find((a) => a.type === "suggestions") as unknown as { items: string[] }).items).toContain("Contacts et importation");
+    r = await chat(bg, "Contacts et importation", r.token);
+    expect(r.reply).toMatch(/Décrivez brièvement/);
+    r = await chat(bg, "Mon import Excel de 500 contacts échoue", r.token);
+    expect(r.reply).toMatch(/votre nom/);
+    r = await chat(bg, "Sophie Martin", r.token);
+    expect(r.reply).toMatch(/Merci Sophie/);
+    r = await chat(bg, "sophie.martin@example.com", r.token);
+    expect(r.reply).toMatch(/demande de soutien \*\*#[A-Z0-9]{8}\*\*/);
+    expect(r.actions.some((a) => a.type === "ticket_created")).toBe(true);
+    const t = await one<Record<string, any>>(`SELECT * FROM support_tickets WHERE email = 'sophie.martin@example.com'`);
+    expect(t!.category).toBe("Contacts et importation");
+    expect(t!.description).toContain("import Excel");
+  });
+});
+
+describe("smart booking", () => {
+  it("does not propose the demo after every answer, only after several questions", async () => {
+    let r = await chat(bg, "Oui", null);
+    r = await chat(bg, "Sutton", r.token);
+    r = await chat(bg, "Créer mon site web", r.token);
+    r = await chat(bg, "Je préfère ne pas", r.token); // flow done (booking offered once at the end)
+    r = await chat(bg, "Avez-vous une application mobile ?", r.token);
+    expect(r.actions.some((a) => a.type === "booking")).toBe(false);
+    r = await chat(bg, "Et l'intégration Centris ?", r.token);
+    expect(r.actions.some((a) => a.type === "booking")).toBe(false);
+    r = await chat(bg, "Et combien coûte le site Pro ?", r.token);
+    expect(r.actions.some((a) => a.type === "booking")).toBe(true);
   });
 });

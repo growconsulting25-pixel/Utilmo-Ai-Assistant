@@ -9,7 +9,7 @@ import { val, type Profile, type ProfileUpdate } from "./profile";
  * deterministically (instant, no LLM call); free questions are answered briefly and the flow resumes.
  */
 type Step = AssistantSettings["guidedFlow"]["steps"][number];
-export type FlowFlags = { flow_step?: FlowStepKey | "done"; not_broker?: boolean; flow_skipped?: string[]; support_mode?: boolean };
+export type FlowFlags = { support_step?: string; support_category?: string; flow_step?: FlowStepKey | "done"; not_broker?: boolean; flow_skipped?: string[]; support_mode?: boolean };
 
 const YES = /^\s*(oui|yes|ouais|yep|yeah|absolument|exact|correct|tout à fait|bien sûr|of course|sure|je suis courtier|i am a broker|i'm a broker)\b/i;
 const NO = /^\s*(non|no|nope|pas vraiment|not really)\b/i;
@@ -123,4 +123,53 @@ export function stepState(key: FlowStepKey | null): "NEEDS_DISCOVERY" | "SERVICE
   if (key === "main_goal") return "SERVICE_RECOMMENDATION";
   if (key === "name" || key === "phone" || key === "email") return "CONTACT_CAPTURE";
   return "NEEDS_DISCOVERY";
+}
+
+// ---------------------------------------------------------------- support funnel
+export type SupportStepKey = "category" | "issue" | "name" | "contact";
+
+/** Next step of the support funnel (existing customers): category → issue → name → e-mail/phone → ticket. */
+export function supportStep(p: Profile): SupportStepKey | null {
+  const fl = (p.flags ?? {}) as FlowFlags;
+  if (!fl.support_mode || fl.support_step === "done") return null;
+  if (!fl.support_category) return "category";
+  if (!val(p, "support_issue")) return "issue";
+  if (!val(p, "first_name")) return "name";
+  if (!val(p, "email") && !val(p, "phone")) return "contact";
+  return null;
+}
+
+export function parseSupportAnswer(step: SupportStepKey, message: string, s: AssistantSettings): FlowParse & { category?: string } {
+  const msg = message.trim();
+  const out: FlowParse & { category?: string } = { updates: {}, flags: {}, answered: false };
+  const src = "user_confirmed" as const;
+  if (step === "category") {
+    const opts = [...s.guidedFlow.support.categories.fr, ...s.guidedFlow.support.categories.en];
+    const hit = opts.find((o) => o.toLowerCase() === msg.toLowerCase());
+    out.category = hit ?? (msg.length <= 60 ? msg : "Autre");
+    if (!hit && msg.length > 60) out.updates.support_issue = { value: msg.slice(0, 1000), source: src };
+    out.answered = true;
+  } else if (step === "issue") {
+    if (msg.length >= 3) { out.updates.support_issue = { value: msg.slice(0, 1000), source: src }; out.answered = true; }
+  } else if (step === "name") {
+    const r = parseFlowAnswer({ key: "name", question: { fr: "", en: "" }, options: { fr: [], en: [] } }, msg);
+    Object.assign(out.updates, r.updates); out.answered = r.answered && !r.flags.contact_refused;
+  } else if (step === "contact") {
+    const em = extractEmails(msg)[0], ph = extractPhones(msg)[0];
+    if (em) out.updates.email = { value: em, source: "pattern" };
+    if (ph) out.updates.phone = { value: ph, source: "pattern" };
+    out.answered = !!(em || ph);
+    if (!out.answered && (msg.includes("@") || /\d{3}/.test(msg))) out.invalid = msg.includes("@") ? "email" : "phone";
+  }
+  return out;
+}
+
+export function supportQuestion(step: SupportStepKey, s: AssistantSettings, lang: "fr" | "en", p: Profile): { text: string; options: string[] } {
+  const sp = s.guidedFlow.support;
+  switch (step) {
+    case "category": return { text: sp.categoryQuestion[lang], options: sp.categories[lang] };
+    case "issue": return { text: sp.issueQuestion[lang], options: [] };
+    case "name": return { text: sp.nameQuestion[lang], options: [] };
+    case "contact": return { text: fill(sp.contactQuestion[lang], p), options: [] };
+  }
 }

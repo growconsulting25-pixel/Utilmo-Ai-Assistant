@@ -6,7 +6,7 @@ import { acquireLock, getDb, many, one, releaseLock } from "./db";
 import { SEED_BUNDLE } from "./generated/seed-bundle";
 import type { AssistantCtx } from "./tenant";
 
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;
 export const CRAWLER_UA = "UtilmoAIIngest/1.0 (+knowledge-base crawler; respects robots.txt)";
 
 export interface DocInput {
@@ -94,10 +94,14 @@ export async function bootstrapAssistant(a: AssistantCtx, triggerCrawl?: (source
     if ((cur?.v ?? 0) >= SEED_VERSION) { a.settings.seedVersionApplied = cur!.v!; return false; }
     let crawlSourceId: string | null = null;
     if (bundle) {
-      const src = await one<{ id: string }>(
-        `INSERT INTO knowledge_sources (organization_id, assistant_id, type, name, collection, priority) VALUES ($1,$2,'seed',$3,'both',3) RETURNING id`,
-        [a.organizationId, a.id, "Base initiale (pages officielles, synthèse vérifiable)"]);
+      // Incremental: reuse the seed source and import only seed files not imported yet.
+      const src = await one<{ id: string }>(`SELECT id FROM knowledge_sources WHERE assistant_id = $1 AND type = 'seed' ORDER BY created_at LIMIT 1`, [a.id])
+        ?? await one<{ id: string }>(
+          `INSERT INTO knowledge_sources (organization_id, assistant_id, type, name, collection, priority) VALUES ($1,$2,'seed',$3,'both',3) RETURNING id`,
+          [a.organizationId, a.id, "Base initiale (pages officielles, synthèse vérifiable)"]);
+      const done = new Set((await many<{ f: string }>(`SELECT metadata->>'seed_file' AS f FROM knowledge_documents WHERE assistant_id = $1 AND metadata ? 'seed_file'`, [a.id])).map((r) => r.f));
       for (const f of bundle.docs) {
+        if (done.has(f.file)) continue;
         const { meta, body } = parseFrontMatter(f.raw);
         await ingestDocument(a, {
           sourceId: src!.id, title: meta.title ?? f.file, url: meta.url ?? null, language: "multi",
@@ -105,7 +109,8 @@ export async function bootstrapAssistant(a: AssistantCtx, triggerCrawl?: (source
           content: body, verified: false, fetchedAt: meta.fetched_at ?? null, metadata: { seed_file: f.file, source_type: meta.source_type, urls: meta.urls },
         });
       }
-      if (bundle.website) {
+      const hasWebsite = await one(`SELECT 1 FROM knowledge_sources WHERE assistant_id = $1 AND type = 'website'`, [a.id]);
+      if (bundle.website && !hasWebsite) {
         const w = bundle.website as { name: string; url: string; collection?: string; priority?: number };
         const ws = await one<{ id: string }>(
           `INSERT INTO knowledge_sources (organization_id, assistant_id, type, name, url, collection, priority, config) VALUES ($1,$2,'website',$3,$4,$5,$6,$7) RETURNING id`,

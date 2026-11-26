@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { ErrorBox, Field, Loading, PageHeader, Toast, useAsync } from "../ui";
+import { ErrorBox, Field, ImagePicker, Loading, PageHeader, Toast, useAsync } from "../ui";
 
 type S = any;
 const TABS = [["behavior", "Comportement IA"], ["appearance", "Apparence"], ["booking", "Réservation"], ["privacy", "Confidentialité & limites"], ["domains", "Domaines autorisés"], ["system", "Système"]] as const;
@@ -40,6 +40,12 @@ export function SettingsPage({ role }: { role: string }) {
             {num("Longueur max. (mots)", "behavior.maxResponseWords")}
             {num("Proposer la prise de coordonnées après (tours)", "behavior.contactCaptureAfterTurns", "Jamais imposée ; seulement proposée.")}
           </div>
+          <h3 className="pt-2 text-sm font-semibold">Langues</h3>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <Field label="Langues actives"><div className="flex gap-4 pt-2">{(["fr", "en"] as const).map((l) => <label key={l} className="flex items-center gap-1 text-sm"><input type="checkbox" disabled={!admin} checked={s.behavior.languages.enabled.includes(l)} onChange={(e) => { const cur: string[] = s.behavior.languages.enabled; const next = e.target.checked ? [...new Set([...cur, l])] : cur.filter((x) => x !== l); if (next.length) set("behavior.languages.enabled", next); }} />{l === "fr" ? "Français" : "English"}</label>)}</div></Field>
+            <label className="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" disabled={!admin} checked={s.behavior.languages.autoDetect} onChange={(e) => set("behavior.languages.autoDetect", e.target.checked)} /> Détecter la langue du visiteur</label>
+            <label className="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" disabled={!admin} checked={s.behavior.languages.showSwitcher} onChange={(e) => set("behavior.languages.showSwitcher", e.target.checked)} /> Afficher le sélecteur FR / EN</label>
+          </div>
           {bi("Description de l'entreprise (contexte fourni à l'IA)", "behavior.companyDescription", true)}
           {bi("Message d'accueil", "behavior.welcome", true)}
           <div className="grid gap-3 sm:grid-cols-2">{(["fr", "en"] as const).map((l) => <Field key={l} label={`Suggestions (${l.toUpperCase()}, une par ligne)`}><textarea className="input h-32" disabled={!admin} value={s.behavior.suggestions[l].join("\n")} onChange={(e) => set(`behavior.suggestions.${l}`, e.target.value.split("\n").filter((x) => x.trim()))} /></Field>)}</div>
@@ -70,8 +76,8 @@ export function SettingsPage({ role }: { role: string }) {
             <Field label="Police du texte"><input className="input" disabled={!admin} value={s.appearance.fontFamily} onChange={(e) => set("appearance.fontFamily", e.target.value)} /></Field>
             <Field label="Police des titres"><input className="input" disabled={!admin} value={s.appearance.headingFontFamily} onChange={(e) => set("appearance.headingFontFamily", e.target.value)} /></Field>
             {num("Arrondi (px)", "appearance.radius")}{num("Hauteur du clavardage intégré (px)", "appearance.inlineHeight")}
-            <Field label="Logo (URL)"><input className="input" disabled={!admin} value={s.appearance.logoUrl} onChange={(e) => set("appearance.logoUrl", e.target.value)} /></Field>
-            <Field label="Avatar (URL)" hint="Évitez les photos de personnes non approuvées."><input className="input" disabled={!admin} value={s.appearance.avatarUrl} onChange={(e) => set("appearance.avatarUrl", e.target.value)} /></Field>
+            <div className="sm:col-span-2"><Field label="Photo de profil de l'assistant (avatar et bulle)" hint="PNG/JPG/WebP, redimensionnée automatiquement. Évitez les photos de personnes non approuvées."><ImagePicker value={s.appearance.avatarUrl.startsWith("/") ? location.origin + s.appearance.avatarUrl : s.appearance.avatarUrl} onChange={(v) => set("appearance.avatarUrl", v)} disabled={!admin} round label="Téléverser l'avatar" /></Field></div>
+            <div className="sm:col-span-2"><Field label="Logo"><ImagePicker value={s.appearance.logoUrl.startsWith("/") ? location.origin + s.appearance.logoUrl : s.appearance.logoUrl} onChange={(v) => set("appearance.logoUrl", v)} disabled={!admin} label="Téléverser le logo" /></Field></div>
             <Field label="Position du lanceur"><select className="input" disabled={!admin} value={s.appearance.launcherPosition} onChange={(e) => set("appearance.launcherPosition", e.target.value)}><option value="right">Bas droite</option><option value="left">Bas gauche</option></select></Field>
             <Field label="Style du bouton"><select className="input" disabled={!admin} value={s.appearance.launcherStyle} onChange={(e) => set("appearance.launcherStyle", e.target.value)}><option value="circle">Cercle</option><option value="pill">Pilule avec libellé</option></select></Field>
           </div>

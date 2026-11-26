@@ -5,7 +5,7 @@ import { AnalysisSchema, ANALYZER_SYSTEM, analysisJsonSchema, analysisToUpdates,
 import { detectLanguage, extractContact } from "./extraction";
 import { containsSensitiveSecret, looksLikeInjection, redactSecrets } from "./injection";
 import { decide, markAsked, type PolicyDecision } from "./policy";
-import { currentStep, fill, isOption, parseFlowAnswer, stepState, type FlowParse } from "./flow";
+import { currentStep, fill, isOption, parseFlowAnswer, parseSupportAnswer, stepState, supportQuestion, supportStep, type FlowParse } from "./flow";
 import { hasContact, mergeProfile, profileForPrompt, val, type Profile, type ProfileUpdate } from "./profile";
 import { buildSystemPrompt, buildTurnContext, EVALUATOR_SYSTEM, evaluatorJsonSchema, type OpenConflict, type RetrievedChunk } from "./prompts";
 import { recommendServices, type Recommendation, type ServiceDef } from "./recommend";
@@ -94,10 +94,11 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   let analysis: Analysis;
   const fallbackLang = input.languageHint ?? conv.language ?? s.behavior.defaultLanguage;
   const askedStep = currentStep(conv.profile ?? {}, s);
-  const chipAnswer = isOption(askedStep, message);
+  const supCats = [...s.guidedFlow.support.categories.fr, ...s.guidedFlow.support.categories.en].map((x) => x.toLowerCase());
+  const chipAnswer = isOption(askedStep, message) || (supportStep(conv.profile ?? {}) === "category" && supCats.includes(message.trim().toLowerCase()));
   if (chipAnswer) {
     // Button answer in the guided flow: no LLM analysis needed (instant reply).
-    const lang = askedStep!.options.en.some((o) => o.toLowerCase() === message.trim().toLowerCase()) && !askedStep!.options.fr.some((o) => o.toLowerCase() === message.trim().toLowerCase()) ? "en" : (conv.language ?? fallbackLang);
+    const lang = askedStep && askedStep.options.en.some((o) => o.toLowerCase() === message.trim().toLowerCase()) && !askedStep.options.fr.some((o) => o.toLowerCase() === message.trim().toLowerCase()) ? "en" : (conv.language ?? fallbackLang);
     analysis = { ...fallbackAnalysis(lang, message), intents: ["PROVIDE_INFO"], search_queries: [], wants_human: false };
   } else try {
     const transcript = history.slice(-7, -1).map((m) => `${m.role === "user" ? "Visitor" : "Assistant"}: ${m.content.slice(0, 600)}`).join("\n");
@@ -116,6 +117,9 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   // Language: trust the analyser, but cross-check very short messages with the previous language.
   let language: "fr" | "en" = analysis.language;
   if (!chipAnswer && message.trim().split(/\s+/).length <= 2 && !/[a-z]{4,}/i.test(message.replace(/@\S+/g, ""))) language = conv.language ?? fallbackLang;
+  const langs = s.behavior.languages;
+  if (!langs.autoDetect) language = input.languageHint && langs.enabled.includes(input.languageHint) ? input.languageHint : s.behavior.defaultLanguage;
+  if (!langs.enabled.includes(language)) language = langs.enabled.includes(s.behavior.defaultLanguage) ? s.behavior.defaultLanguage : langs.enabled[0];
   if (looksLikeInjection(message) && !analysis.intents.includes("PROMPT_INJECTION")) analysis.intents.push("PROMPT_INJECTION");
   if (hadSecret && !analysis.intents.includes("SENSITIVE_REQUEST")) analysis.intents.push("SENSITIVE_REQUEST");
   if (analysis.intents.length) void store.track("intent_detected", { intents: analysis.intents, categories: analysis.categories }, conv.id);
@@ -145,16 +149,32 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     profile.flags = { ...(profile.flags ?? {}), ...ff };
     if (ff.commercial_intent && rank[ff.commercial_intent] > rank[profile.flags.commercial_intent ?? "none"]) profile.flags.commercial_intent = ff.commercial_intent;
   }
+  // 4c) Support funnel (existing customers): category → issue → name → contact → ticket.
+  const askedSup = supportStep(conv.profile ?? {});
+  let supParse: ReturnType<typeof parseSupportAnswer> | null = null;
+  if (askedSup && !securityTurn && !isOption(askedStep, message)) {
+    supParse = parseSupportAnswer(askedSup, message, s);
+    profile = mergeProfile(profile, supParse.updates).profile;
+    if (supParse.category) profile.flags = { ...(profile.flags ?? {}), support_category: supParse.category };
+  }
+  if (!securityTurn && !profile.flags?.support_mode && profile.flags?.support_step !== "done" && (analysis.intents.includes("SUPPORT_REQUEST") || (val(profile, "existing_customer") === "yes" && analysis.categories.includes("CUSTOMER_SUPPORT")))) {
+    profile.flags = { ...(profile.flags ?? {}), support_mode: true, flow_step: "done" };
+  }
 
   // 5) Retrieval (RAG): only what is relevant for this turn.
   const supportMode = !!profile.flags?.support_mode || analysis.intents.includes("SUPPORT_REQUEST") || (val(profile, "existing_customer") === "yes" && (analysis.categories.includes("CUSTOMER_SUPPORT") || !!analysis.support_category));
   const security = securityTurn;
   const isQuestion = !chipAnswer && (message.includes("?") || analysis.intents.some((i) => ["PRODUCT_QUESTION", "PRICING_QUESTION", "INTEGRATION_QUESTION"].includes(i)));
   const justEnteredSupport = !!flowParse?.flags.support_mode;
-  const flowActive = s.guidedFlow.enabled && profile.flags?.flow_step !== "done" && !security && !analysis.wants_human && (!supportMode || justEnteredSupport);
+  const flowActive = s.guidedFlow.enabled && profile.flags?.flow_step !== "done" && !security && !analysis.wants_human && !profile.flags?.support_mode;
+  const supportFlowActive = s.guidedFlow.enabled && !!profile.flags?.support_mode && profile.flags?.support_step !== "done" && !security && !analysis.wants_human;
+  const nextSup = supportFlowActive ? supportStep(profile) : null;
+  // Smart booking: count questions; propose an expert after several questions (not after every reply).
+  const qCount = (Number((profile.flags as Record<string, unknown>)?.q_since_offer ?? 0)) + (isQuestion ? 1 : 0);
+  profile.flags = { ...(profile.flags ?? {}), q_since_offer: qCount } as typeof profile.flags;
   const nextStep = flowActive ? currentStep(profile, s) : null;
   let chunks: RetrievedChunk[] = [];
-  if (!security && (!flowActive || isQuestion)) {
+  if (!security && ((!flowActive && !supportFlowActive) || isQuestion)) {
     const queries = Array.from(new Set([...analysis.search_queries, message.slice(0, 300)])).filter((q) => q.trim().length > 1);
     try {
       chunks = await deps.search(queries, { collection: supportMode ? "support" : "sales", topK: s.ai.retrievalTopK });
@@ -165,7 +185,16 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   // 6) Deterministic policy / state machine.
   const bookingAvailable = s.booking.provider !== "none" && !!s.booking.url;
   let decision: PolicyDecision;
-  if (flowActive) {
+  if (supportFlowActive) {
+    const q = nextSup ? supportQuestion(nextSup, s, language, profile) : null;
+    decision = {
+      state: nextSup ? "EXISTING_CUSTOMER_SUPPORT" : "SUPPORT_ESCALATION", askField: null, handoff: false, saveLead: false, offerBooking: false,
+      createTicket: !nextSup && conv.escalationStatus !== "ticket_created",
+      guidance: ["This is an existing customer. Answer ONLY their question in 1-2 very short sentences using verified support sources; if no source covers it, say the support team will help. Never invent steps. Do NOT ask any question: the application asks the next step itself."],
+      suggestions: q ? { fr: language === "fr" ? q.options : [], en: language === "en" ? q.options : [] } : { fr: [], en: [] },
+    };
+    if (!nextSup) profile.flags = { ...(profile.flags ?? {}), support_step: "done" };
+  } else if (flowActive) {
     const done = !nextStep && !justEnteredSupport;
     decision = {
       state: justEnteredSupport ? "EXISTING_CUSTOMER_SUPPORT" : stepState(nextStep?.key ?? null), askField: null, createTicket: false, handoff: false, saveLead: true,
@@ -185,7 +214,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
       decision.askField = null;
       decision.guidance = decision.guidance.filter((g) => !/ask ONE question|single missing/.test(g));
       decision.guidance.push("Do not ask further qualification questions. Reply in 1-2 very short sentences (max 30 words), no links. When relevant, invite them to book a demo with the button.");
-      if (bookingAvailable && !supportMode) decision.offerBooking = true;
+      // Booking only when it is smart: explicit request (handled by policy), or after several questions.
+      if (bookingAvailable && !supportMode && qCount >= 3) { decision.offerBooking = true; decision.guidance.push("The visitor has asked several questions: in one short sentence, suggest booking a free demo with an expert (button shown below)."); }
     }
     profile = markAsked(profile, decision.askField);
   }
@@ -219,7 +249,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   if (flowActive) {
     const gf = s.guidedFlow;
     if (flowParse?.invalid && askedStep) flowText = `**${(flowParse.invalid === "phone" ? gf.invalidPhone : gf.invalidEmail)[language]}**`;
-    else if (justEnteredSupport) flowText = `**${gf.supportPrompt[language]}**`;
+    else if (justEnteredSupport) flowText = "";
     else if (!nextStep) flowText = fill((profile.flags?.contact_refused ? gf.refusalCompletion : gf.completion)[language], profile);
     else {
       let ack = "";
@@ -229,13 +259,26 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
           const hl = cats.map((c) => gf.highlights[c]).find(Boolean);
           if (hl && hl[language].length) ack = `${gf.highlightsIntro[language]}\n${hl[language].map((x) => `- ${x}`).join("\n")}`;
           else if (recs[0]) ack = recs[0].why;
-        } else if (askedStep?.key === "is_broker" || askedStep?.key === "brokerage" || askedStep?.key === "role") ack = language === "fr" ? "Parfait !" : "Great!";
+        } else if ((askedStep?.key === "is_broker" && flowParse.updates.user_type) || askedStep?.key === "brokerage" || askedStep?.key === "role") ack = language === "fr" ? "Parfait !" : "Great!";
       }
       flowText = [ack, `**${fill(nextStep.question[language], profile)}**`].filter(Boolean).join("\n\n");
     }
     if (flowParse?.invalid && askedStep) decision.suggestions = { fr: askedStep.options.fr, en: askedStep.options.en };
   }
-  if (flowActive && !isQuestion) {
+  let supportDonePending = false;
+  if (supportFlowActive) {
+    const gf = s.guidedFlow;
+    if (supParse?.invalid) flowText = `**${(supParse.invalid === "phone" ? gf.invalidPhone : gf.invalidEmail)[language]}**`;
+    else if (nextSup) {
+      const q = supportQuestion(nextSup, s, language, profile);
+      flowText = `**${q.text}**`;
+    } else supportDonePending = true;
+  }
+  if (supportFlowActive && (!isQuestion || supportDonePending)) {
+    replyText = supportDonePending ? "" : flowText;
+    model = "deterministic-flow";
+    if (replyText) emit({ type: "delta", text: replyText });
+  } else if (flowActive && !isQuestion) {
     replyText = flowText;
     model = "deterministic-flow";
     emit({ type: "delta", text: replyText });
@@ -247,8 +290,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     });
     usage = r.usage; model = r.model;
     if (r.stopReason === "refusal") { replyText = REFUSAL_REPLY[language]; emit({ type: "replace", text: replyText }); }
-    else if (!r.text.trim()) throw new Error("empty_reply");
-    if (flowActive && flowText) { const add = "\n\n" + flowText; replyText += add; emit({ type: "delta", text: add }); }
+    else if (!r.text.trim() && !flowText) throw new Error("empty_reply");
+    if ((flowActive || supportFlowActive) && flowText) { const add = "\n\n" + flowText; replyText += add; emit({ type: "delta", text: add }); }
   } catch (err) {
     log("generation_failed", { error: String(err).slice(0, 300) });
     // Nothing persisted for the assistant: the client can retry with the same clientMessageId.
@@ -293,7 +336,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   if (decision.createTicket && escalationStatus !== "ticket_created") {
     const ticketHistory = history.slice(-8).map((m) => ({ role: m.role, content: m.content.slice(0, 800) }));
     const ticketId = await store.createTicket({ ...conv, profile, leadId }, {
-      category: analysis.support_category ?? "other",
+      category: (profile.flags?.support_category as string | undefined) ?? analysis.support_category ?? "other",
       description: val(profile, "support_issue") ?? message.slice(0, 1000),
       priority: decision.handoff ? "high" : "normal",
       history: ticketHistory, summary: conv.summary, leadId,
@@ -301,6 +344,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     escalationStatus = "ticket_created";
     const reference = ticketId.slice(0, 8).toUpperCase();
     actions.push({ type: "ticket_created", reference });
+    if (supportDonePending) { const t = s.guidedFlow.support.done[language].replace("{ref}", reference); replyText = replyText ? replyText + "\n\n" + t : t; emit({ type: "delta", text: (replyText === t ? "" : "\n\n") + t }); }
     void store.track("support_escalated", { ticket_id: ticketId }, conv.id);
     deps.background(deps.emitWebhook("support.ticket_created", { ticket_id: ticketId, reference, conversation_id: conv.id, lead_id: leadId, category: analysis.support_category ?? "other", description: val(profile, "support_issue") ?? message.slice(0, 1000), profile }, `support.ticket_created:${ticketId}`));
   } else if (supportMode && conv.state !== "EXISTING_CUSTOMER_SUPPORT" && conv.state !== "SUPPORT_ESCALATION") {
@@ -310,6 +354,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     if (escalationStatus === "none") escalationStatus = "requested";
     actions.push({ type: "handoff", phone: s.behavior.escalation.salesPhone || s.behavior.escalation.supportPhone || undefined, email: s.behavior.escalation.supportEmail || undefined });
   }
+  if (decision.offerBooking && bookingAvailable) profile.flags = { ...(profile.flags ?? {}), q_since_offer: 0 } as typeof profile.flags;
   if (decision.offerBooking && bookingAvailable) actions.push({ type: "booking", url: s.booking.url, label: s.booking.label[language] || s.booking.label.fr });
   const sources = dedupeSources(chunks.filter((c) => c.priority <= 3 && c.url && c.score > 0.05));
   if (sources.length && decision.state !== "CONTACT_CAPTURE" && analysis.intents.some((i) => ["PRODUCT_QUESTION", "PRICING_QUESTION", "INTEGRATION_QUESTION"].includes(i))) {

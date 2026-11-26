@@ -372,10 +372,15 @@ route("GET", "/settings", "viewer", async (_req, _p, s, url) => {
 });
 route("PUT", "/settings", "admin", async (req, _p, s, url) => {
   const a = await assistantFor(s, url);
-  const raw = await readJson(req, 128 * 1024) as { settings?: unknown };
+  const raw = await readJson(req, 400 * 1024) as { settings?: unknown };
   const parsed = SettingsSchema.safeParse(raw.settings);
   if (!parsed.success) throw new HttpError(400, "invalid_settings", parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   if (parsed.data.booking.url && !/^https:\/\//.test(parsed.data.booking.url)) throw new HttpError(400, "invalid_booking_url");
+  for (const k of ["avatarUrl", "logoUrl"] as const) {
+    const v = parsed.data.appearance[k];
+    if (v && !(/^(https:\/\/|\/)/.test(v) || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v))) throw new HttpError(400, "invalid_image", `${k} must be an https URL, a site path or an uploaded image`);
+    if (v && v.length > 120_000) throw new HttpError(413, "image_too_large", "Image too large (max ~90 KB after resizing).");
+  }
   const next = { ...parsed.data, seedVersionApplied: a.settings.seedVersionApplied };
   await getDb().query(`UPDATE assistant_settings SET settings = $2, version = version + 1, updated_at = now(), updated_by = $3 WHERE assistant_id = $1`, [a.id, JSON.stringify(next), s.uid]);
   invalidateAssistantCache();
@@ -556,7 +561,20 @@ async function handleAuth(req: Request, path: string, ctx: AdminCtx): Promise<Re
   if (path === "/me" && req.method === "GET") {
     const s = await requireAdmin(req);
     const org = await one<{ name: string; slug: string }>(`SELECT name, slug FROM organizations WHERE id = $1`, [s.org]);
-    return json({ user: { id: s.uid, email: s.email, role: s.role }, organization: org });
+    const u = await one<{ name: string | null; avatar: string | null; ui_language: string }>(`SELECT name, avatar, ui_language FROM admin_users WHERE id = $1`, [s.uid]);
+    return json({ user: { id: s.uid, email: s.email, role: s.role, name: u?.name ?? null, avatar: u?.avatar ?? null, ui_language: u?.ui_language ?? "fr" }, organization: org });
+  }
+  if (path === "/me" && req.method === "PATCH") {
+    const s = await requireAdmin(req);
+    const b = await body(req, z.object({
+      name: z.string().max(100).optional(),
+      avatar: z.string().max(200_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).nullable().optional(),
+      ui_language: z.enum(["fr", "en"]).optional(),
+    }), 256 * 1024);
+    await getDb().query(`UPDATE admin_users SET name = coalesce($2, name), avatar = CASE WHEN $3::boolean THEN $4 ELSE avatar END, ui_language = coalesce($5, ui_language) WHERE id = $1`,
+      [s.uid, b.name ?? null, b.avatar !== undefined, b.avatar ?? null, b.ui_language ?? null]);
+    await audit(s.org, s.uid, "admin.profile_updated", "admin_user", s.uid, { fields: Object.keys(b) }, ip);
+    return json({ ok: true });
   }
   return null;
 }

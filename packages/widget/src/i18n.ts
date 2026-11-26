@@ -25,6 +25,7 @@ export const STRINGS = {
     unread: (n: number) => `${n} nouveau${n > 1 ? "x" : ""} message${n > 1 ? "s" : ""}`,
     language: "Langue",
     you: "Vous",
+    book: "Réserver une démo",
   },
   en: {
     online: "Online · replies in seconds",
@@ -52,6 +53,7 @@ export const STRINGS = {
     unread: (n: number) => `${n} new message${n > 1 ? "s" : ""}`,
     language: "Language",
     you: "You",
+    book: "Book a demo",
   },
 };
 export type Strings = (typeof STRINGS)["fr"];

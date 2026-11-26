@@ -6,7 +6,7 @@ import { SqlChatStore, toRecord, type ConversationRow } from "./chat-store";
 import { ipHash, randomToken } from "./crypto";
 import { getDb, many, one } from "./db";
 import { clientIp, corsHeaders, errorResponse, HttpError, json, readJson } from "./http";
-import { bootstrapAssistant } from "./knowledge";
+import { bootstrapAssistant, SEED_VERSION } from "./knowledge";
 import { checkOrigin } from "./origin";
 import { rateLimit } from "./ratelimit";
 import { searchKnowledge } from "./retrieval";
@@ -84,7 +84,7 @@ export async function handleChat(req: Request, ctx: Ctx = {}): Promise<Response>
     if ((daily?.requests ?? 0) >= settings.limits.dailyMessageCap) throw new HttpError(503, "daily_cap_reached", "The assistant is temporarily unavailable.");
 
     // First-run knowledge bootstrap (idempotent; no-op once applied).
-    if (a.settings.seedVersionApplied < 1) await bootstrapAssistant(a, ctx.triggerCrawl ? (sid) => ctx.triggerCrawl!(a, sid) : undefined);
+    if (a.settings.seedVersionApplied < SEED_VERSION) await bootstrapAssistant(a, ctx.triggerCrawl ? (sid) => ctx.triggerCrawl!(a, sid) : undefined);
 
     const lang = input.language ?? settings.behavior.defaultLanguage;
     const { row, token, created } = await getOrCreateConversation(a, input.sessionToken, input.firstTouch, lang);

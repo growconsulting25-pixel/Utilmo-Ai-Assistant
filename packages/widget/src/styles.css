@@ -22,6 +22,8 @@ button:disabled { cursor: not-allowed; }
 .u-lang button.on { background: var(--u-primary); color: #fff; }
 .u-icon-btn { border: 0; background: transparent; width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: var(--u-muted); }
 .u-icon-btn:hover { background: var(--u-soft); color: var(--u-primary); }
+.u-cal-btn { color: var(--u-accent); background: color-mix(in srgb, var(--u-accent) 12%, #fff); text-decoration: none; }
+.u-cal-btn:hover { background: color-mix(in srgb, var(--u-accent) 22%, #fff); color: var(--u-accent); }
 .u-menu-wrap { position: relative; }
 .u-menu { position: absolute; right: 0; top: 40px; z-index: 5; background: #fff; border: 1px solid var(--u-line); border-radius: 12px; box-shadow: var(--u-shadow); padding: 6px; min-width: 210px; }
 .u-menu button { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; padding: 9px 10px; border-radius: 8px; font-size: 13px; text-align: left; }

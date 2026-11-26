@@ -55,3 +55,37 @@ export function Toast({ msg, onDone }: { msg: string | null; onDone: () => void 
   useEffect(() => { if (msg) { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); } }, [msg, onDone]);
   return msg ? <div role="status" className="fixed bottom-5 right-5 z-50 rounded-lg bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg">{msg}</div> : null;
 }
+
+/** Resize an image file client-side to a square-ish max size and return a compact WebP/PNG data URL. */
+export async function resizeImage(file: File, max = 256): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+    const webp = c.toDataURL("image/webp", 0.86);
+    return webp.startsWith("data:image/webp") ? webp : c.toDataURL("image/png");
+  } finally { URL.revokeObjectURL(url); }
+}
+
+export function ImagePicker({ value, onChange, disabled, round, label }: { value: string; onChange: (v: string) => void; disabled?: boolean; round?: boolean; label: string }) {
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div className="flex items-center gap-3">
+      <div className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden border border-slate-200 bg-white ${round ? "rounded-full" : "rounded-lg"}`}>
+        {value ? <img src={value} alt="" className="h-full w-full object-contain" /> : <span className="text-xs text-slate-400">—</span>}
+      </div>
+      <div className="space-y-1">
+        <label className={`btn-secondary cursor-pointer ${disabled ? "pointer-events-none opacity-50" : ""}`}>
+          {label}
+          <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={disabled}
+            onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; if (f.size > 8_000_000) { setErr("Max 8 Mo"); return; } setErr(null); onChange(await resizeImage(f)); e.target.value = ""; }} />
+        </label>
+        {value && !disabled && <button type="button" className="block text-xs text-slate-500 hover:text-red-600" onClick={() => onChange("")}>Retirer</button>}
+        {err && <div className="text-xs text-red-600">{err}</div>}
+      </div>
+    </div>
+  );
+}

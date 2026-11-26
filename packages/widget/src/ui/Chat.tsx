@@ -46,11 +46,15 @@ export function Header({ store, state, children }: { store: WidgetStore; state: 
         <div class="u-subtitle"><span class="u-dot" aria-hidden="true" />{t.online}</div>
       </div>
       <div class="u-header-actions">
-        <div class="u-lang" role="group" aria-label={t.language}>
-          {(["fr", "en"] as const).map((l) => (
+        {s?.booking.enabled && (
+          <a class="u-icon-btn u-cal-btn" href={s.booking.url} target="_blank" rel="noopener noreferrer" aria-label={s.booking.label[state.language] || t.book} title={s.booking.label[state.language] || t.book}
+            onClick={() => store.api.track("booking_clicked", store.state.token, { url: s.booking.url, from: "header" })}><IconCalendar /></a>
+        )}
+        {s?.languages?.showSwitcher !== false && <div class="u-lang" role="group" aria-label={t.language}>
+          {((s?.languages?.enabled ?? ["fr", "en"]) as ("fr" | "en")[]).map((l) => (
             <button type="button" class={state.language === l ? "on" : ""} aria-pressed={state.language === l} onClick={() => store.setLanguage(l)}>{l.toUpperCase()}</button>
           ))}
-        </div>
+        </div>}
         <div class="u-menu-wrap" ref={menuRef}>
           <button type="button" class="u-icon-btn" aria-label={t.menu} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><IconMore /></button>
           {menu && (
