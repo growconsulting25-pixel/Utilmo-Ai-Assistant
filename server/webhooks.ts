@@ -281,7 +281,7 @@ export function renderEmail(event: string, p: Record<string, unknown>): { subjec
   </table>
  </td></tr>
  <tr><td align="center" style="padding:20px 10px 0;font-size:12px;line-height:1.6;color:#8d879a">
-   Envoyé automatiquement par l'assistant IA <strong style="color:#4c2b7b">Utilmo</strong><br>3737 Crémazie-Est, #401, Montréal · 514-360-2187 · support@utilmo.ca<br>
+   Envoyé automatiquement par l'assistant IA <strong style="color:#4c2b7b">Utilmo</strong><br>3737 Crémazie-Est, #401, Montréal · 514-360-2187 · support@utilmo.com<br>
    <a href="${base}/admin/#/notifications" style="color:#8d879a">Gérer les notifications</a>
  </td></tr>
 </table></td></tr></table></body></html>`;

@@ -26,7 +26,7 @@ export function Notifications({ role }: { role: string }) {
   useEffect(() => {
     if (!data) return;
     const c = existing?.config ?? {};
-    setF({ enabled: existing?.enabled ?? false, to: c.to ?? "support@marketingwebsites.ca, jean@marketingwebsites.ca, support@utilmo.ca", events: c.events ?? EVENTS.filter((e) => e[0] !== "lead.qualified").map((e) => e[0]), provider: c.provider ?? "smtp", smtp_host: c.smtp_host ?? "", smtp_port: c.smtp_port ?? 465, smtp_user: c.smtp_user ?? "", from: c.from ?? "" });
+    setF({ enabled: existing?.enabled ?? false, to: c.to ?? "support@marketingwebsites.ca, jean@marketingwebsites.ca, support@utilmo.com", events: c.events ?? EVENTS.filter((e) => e[0] !== "lead.qualified").map((e) => e[0]), provider: c.provider ?? "smtp", smtp_host: c.smtp_host ?? "", smtp_port: c.smtp_port ?? 465, smtp_user: c.smtp_user ?? "", from: c.from ?? "" });
   }, [data]);
   if (loading || !f) return <Loading />;
   const save = async (thenTest = false) => {

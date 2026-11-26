@@ -289,13 +289,13 @@ describe("human handoff: email notification + live takeover", () => {
     const ints = (await admin("/integrations")).data.items;
     const email = ints.find((i: { type: string }) => i.type === "email");
     expect(email).toBeTruthy(); // seeded by migration, disabled
-    expect(email.config.to).toContain("support@utilmo.ca");
+    expect(email.config.to).toContain("support@utilmo.com");
     await admin(`/integrations/${email.id}`, { method: "PATCH", body: { enabled: true, config: { ...email.config, provider: "smtp", smtp_host: "127.0.0.1", smtp_port: 2526, smtp_user: "notif@example.com" }, secret: "app-password-123" } });
 
     let r = await chat(bg, "Parler à un conseiller", null);
     expect(r.done?.state).toBe("HUMAN_HANDOFF");
     expect(received.length).toBe(1);
-    expect(received[0].to).toEqual(["support@marketingwebsites.ca", "jean@marketingwebsites.ca", "support@utilmo.ca"]);
+    expect(received[0].to).toEqual(["support@marketingwebsites.ca", "jean@marketingwebsites.ca", "support@utilmo.com"]);
     expect(received[0].data).toMatch(/conseiller/);
     const decoded = received[0].data.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
     expect(decoded).toContain(`/admin/#/conversations/${r.conversationId}`);
