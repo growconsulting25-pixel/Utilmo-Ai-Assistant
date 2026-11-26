@@ -237,6 +237,13 @@ export function renderEmail(event: string, p: Record<string, unknown>): { subjec
     ["Nom", name], ["Courriel", v("email")], ["Téléphone", v("phone")], ["Agence", v("brokerage")],
     ["Secteur", Array.from(new Set([v("city"), ...String(v("territory") ?? "").split(", ")].filter(Boolean))).join(", ")], ["Priorité", v("main_goal")],
     ["Intérêts", String(v("services_interest") ?? "").split(", ").filter(Boolean).map((c) => CAT_FR[c] ?? c).join(", ")], ["Score", lead.score != null ? `${lead.score}/100 · ${({ high: "élevée", medium: "moyenne", low: "faible" } as Record<string, string>)[String(lead.priority)] ?? lead.priority}` : null],
+    ["Type de client", ({ broker: "Courtier", agency: "Agence / équipe", team_leader: "Chef d'équipe", other: "Autre" } as Record<string, string>)[String(v("user_type"))] ?? v("user_type")],
+    ["Client existant", v("existing_customer") === true || v("existing_customer") === "yes" ? "Oui" : v("existing_customer") === false || v("existing_customer") === "no" ? "Non" : null],
+    ["Langue", v("language") === "en" ? "Anglais" : v("language") === "fr" ? "Français" : null],
+    ["Échéancier", v("timeline")], ["CRM actuel", v("current_crm")], ["Site web actuel", v("website_status")],
+    ["Sources de leads", v("lead_methods")], ["Défi principal", v("biggest_challenge")], ["Volume", v("lead_volume")],
+    ["Intérêt pour une démo", v("demo_interest") === "yes" ? "Oui" : v("demo_interest") === "no" ? "Non" : null],
+    ["Pourquoi ce score", Array.isArray(lead.score_reasons) && lead.score_reasons.length ? (lead.score_reasons as string[]).join(" · ") : null],
     ["Catégorie", p.category], ["Problème", p.description], ["Dernier message", p.last_message],
   ] as [string, unknown][]).filter(([, x]) => x !== null && x !== undefined && x !== "");
   const summary = (conv.summary ?? p.summary) as string | undefined;
