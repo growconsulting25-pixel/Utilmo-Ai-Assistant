@@ -11,3 +11,6 @@ coverage/
 test-results/
 *.log
 .DS_Store
+
+.env.selfhost
+dist-server/

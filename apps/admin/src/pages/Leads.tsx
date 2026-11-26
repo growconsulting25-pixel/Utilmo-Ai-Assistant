@@ -5,7 +5,7 @@ import { Empty, ErrorBox, fmtDate, Loading, PageHeader, PriorityBadge, StatusBad
 
 export function Leads({ id, role }: { id?: string; role: string }) {
   if (id) return <LeadDetail id={id} role={role} />;
-  const [f, setF] = useState({ q: "", status: "", priority: "", sync: "", service: "", from: "", to: "" });
+  const [f, setF] = useState(() => ({ ...{ q: "", status: "", priority: "", sync: "", service: "", from: "", to: "", demo: "" }, ...Object.fromEntries(new URLSearchParams(location.hash.split("?")[1] ?? "")) }));
   const [applied, setApplied] = useState(f);
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v)).toString();
   const { data, error, loading } = useAsync(() => api(`/leads?limit=200&${qs}`), [qs]);

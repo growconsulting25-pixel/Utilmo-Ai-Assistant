@@ -19,7 +19,8 @@ export function getDb(): Db {
   if (instance) return instance;
   const url = env("DATABASE_URL");
   if (url) {
-    const pool = new pg.Pool({ connectionString: url, max: 3, ssl: url.includes("localhost") ? undefined : { rejectUnauthorized: false } });
+    // SSL only when requested in the URL (sslmode=require), e.g. Supabase/Neon; local/Docker Postgres runs without it.
+    const pool = new pg.Pool({ connectionString: url, max: Number(env("DB_POOL_MAX") ?? 10), ssl: /sslmode=(require|verify)|ssl=true/.test(url) ? { rejectUnauthorized: false } : undefined });
     instance = { query: (t, p) => pool.query(t, p as unknown[]) as never };
   } else {
     const conn = getDatabase();

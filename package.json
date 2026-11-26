@@ -2,7 +2,7 @@
   "name": "utilmo-ai-assistant",
   "version": "1.0.0",
   "private": true,
-  "description": "Utilmo AI — intelligent sales & customer support assistant (inline + floating widget, RAG, lead qualification, admin).",
+  "description": "Utilmo AI \u2014 intelligent sales & customer support assistant (inline + floating widget, RAG, lead qualification, admin).",
   "type": "module",
   "engines": {
     "node": ">=20.12"
@@ -18,7 +18,10 @@
     "test:integration": "vitest run tests/integration",
     "test:e2e": "node tests/e2e/run-e2e.mjs",
     "eval": "tsx tests/evals/run-evals.ts",
-    "crawl": "tsx scripts/ingest/crawl.ts"
+    "crawl": "tsx scripts/ingest/crawl.ts",
+    "build:server": "esbuild server/standalone.ts server/migrate.ts --bundle --platform=node --format=esm --target=node20 --outdir=dist-server --out-extension:.js=.mjs --packages=external && node -e \"require('fs').renameSync('dist-server/standalone.mjs','dist-server/server.mjs')\"",
+    "start": "node dist-server/server.mjs",
+    "migrate": "tsx server/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
@@ -46,6 +49,7 @@
     "@types/smtp-server": "^3.5.13",
     "@vitejs/plugin-react": "^6.3.0",
     "autoprefixer": "^10.7.0",
+    "esbuild": "^0.28.2",
     "postcss": "^8.5.33",
     "smtp-server": "^3.21.7",
     "tailwindcss": "^3.4.19",

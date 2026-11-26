@@ -56,6 +56,7 @@ route("GET", "/dashboard", "viewer", async (_req, _p, s, url) => {
       (SELECT count(*)::int FROM bookings WHERE assistant_id = $1 AND created_at > ${since} AND status = 'confirmed') AS bookings_confirmed,
       (SELECT count(*)::int FROM leads WHERE assistant_id = $1 AND created_at > ${since} AND (qualification->>'demo_interest') = 'yes') AS demo_requests,
       (SELECT count(*)::int FROM support_tickets WHERE assistant_id = $1 AND created_at > ${since}) AS support_requests,
+      (SELECT count(*)::int FROM conversations WHERE assistant_id = $1 AND created_at > ${since} AND escalation_status <> 'none') AS human_requests,
       (SELECT count(*)::int FROM unanswered_questions WHERE assistant_id = $1 AND created_at > ${since} AND status = 'open') AS unanswered,
       (SELECT coalesce(sum(requests),0)::int FROM usage_daily WHERE assistant_id = $1 AND day > (now() - make_interval(days => $2))::date) AS ai_replies,
       (SELECT coalesce(sum(input_tokens),0)::bigint FROM usage_daily WHERE assistant_id = $1 AND day > (now() - make_interval(days => $2))::date) AS input_tokens,
@@ -71,7 +72,9 @@ route("GET", "/dashboard", "viewer", async (_req, _p, s, url) => {
       (SELECT count(*)::int FROM leads WHERE assistant_id = $1 AND created_at::date = d::date AND status <> 'support') AS leads
     FROM generate_series((now() - make_interval(days => $2))::date, now()::date, interval '1 day') d ORDER BY 1`, args);
   const conv = totals.conversations || 0;
-  return json({ days, totals: { ...totals, conversion_rate: conv ? Math.round((totals.leads / conv) * 1000) / 10 : 0 }, services, interests, questions, unanswered, daily, demoData: false });
+  const { env: envGet } = await import("./env");
+  const usdToCad = Number(envGet("USD_TO_CAD") ?? 1.38) || 1.38;
+  return json({ days, usd_to_cad: usdToCad, totals: { ...totals, est_cost_cad: Math.round(Number(totals.est_cost_usd ?? 0) * usdToCad * 100) / 100, conversion_rate: conv ? Math.round((totals.leads / conv) * 1000) / 10 : 0 }, services, interests, questions, unanswered, daily, demoData: false });
 });
 
 // ------------------------------------------------------------------ conversations
@@ -148,6 +151,7 @@ function leadFilters(url: URL, assistantId: string) {
   const status = url.searchParams.get("status"); if (status) { params.push(status); where.push(`l.status = $${params.length}`); }
   const priority = url.searchParams.get("priority"); if (priority) { params.push(priority); where.push(`l.priority = $${params.length}`); }
   const sync = url.searchParams.get("sync"); if (sync) { params.push(sync); where.push(`l.sync_status = $${params.length}`); }
+  if (url.searchParams.get("demo") === "yes") where.push(`l.qualification->>'demo_interest' = 'yes'`);
   const service = url.searchParams.get("service"); if (service) { params.push(service); where.push(`$${params.length} = ANY(l.services_interest)`); }
   const from = url.searchParams.get("from"); if (from) { params.push(from); where.push(`l.created_at >= $${params.length}::date`); }
   const to = url.searchParams.get("to"); if (to) { params.push(to); where.push(`l.created_at < ($${params.length}::date + 1)`); }

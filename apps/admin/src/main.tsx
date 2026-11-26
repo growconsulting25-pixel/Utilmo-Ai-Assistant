@@ -51,7 +51,7 @@ function App() {
   const [asst, setAsst] = useState<string | null>(getAssistant());
   const [mobileNav, setMobileNav] = useState(false);
   const hash = useHash();
-  const [page, ...rest] = hash.split("/");
+  const [page, ...rest] = hash.split("?")[0].split("/");
 
   const loadMe = () => api<Me>("/me").then((m) => {
     // The interface language follows the user's profile (cached in the browser so it applies before render).
@@ -116,7 +116,7 @@ function App() {
         <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
           <button aria-label="Menu" onClick={() => setMobileNav(!mobileNav)}><Menu /></button><img src="/brand/utilmo-logo_2024.png" alt="Utilmo" className="h-6" />
         </div>
-        <div className="mx-auto max-w-7xl p-4 sm:p-8" key={asst ?? ""}>{asst ? pages[page] ?? pages.dashboard : <div className="text-sm text-slate-500">{tr("Aucun assistant.")}</div>}</div>
+        <div className="mx-auto max-w-7xl p-4 sm:p-8" key={(asst ?? "") + hash}>{asst ? pages[page] ?? pages.dashboard : <div className="text-sm text-slate-500">{tr("Aucun assistant.")}</div>}</div>
       </main>
     </div>
   );

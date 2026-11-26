@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-server
+dist-widget
+.data
+.scratch
+.netlify
+test-results
+.git
+.env

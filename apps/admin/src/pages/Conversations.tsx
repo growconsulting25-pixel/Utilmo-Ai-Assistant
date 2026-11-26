@@ -7,7 +7,7 @@ const INTENTS = ["LEAD_GENERATION", "CRM", "WEBSITE", "AUTOMATION", "MARKETING",
 
 export function Conversations({ id, role }: { id?: string; role: string }) {
   if (id) return <ConversationDetail id={id} role={role} />;
-  const [f, setF] = useState({ q: "", from: "", to: "", intent: "", minScore: "", escalation: "" });
+  const [f, setF] = useState(() => ({ ...{ q: "", from: "", to: "", intent: "", minScore: "", escalation: "" }, ...Object.fromEntries(new URLSearchParams(location.hash.split("?")[1] ?? "")) }));
   const [applied, setApplied] = useState(f);
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v)).toString();
   const { data, error, loading } = useAsync(() => api(`/conversations?limit=100&${qs}`), [qs]);
