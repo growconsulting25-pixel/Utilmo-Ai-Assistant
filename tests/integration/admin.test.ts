@@ -80,3 +80,19 @@ describe("admin knowledge management", () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe("account recovery & passwords", () => {
+  it("recovers an owner account once with ADMIN_RECOVERY_TOKEN", async () => {
+    process.env.ADMIN_RECOVERY_TOKEN = "recovery-token-1234567890";
+    expect((await admin("/recover", { body: { token: "wrong", email: "o@example.com", password: "N3wSecret!pass" } })).status).toBe(403);
+    expect((await admin("/recover", { body: { token: "recovery-token-1234567890", email: "o@example.com", password: "N3wSecret!pass" } })).status).toBe(200);
+    expect((await admin("/recover", { body: { token: "recovery-token-1234567890", email: "o@example.com", password: "N3wSecret!pass" } })).status).toBe(409);
+    expect((await admin("/login", { body: { email: "o@example.com", password: "N3wSecret!pass" } })).status).toBe(200);
+    delete process.env.ADMIN_RECOVERY_TOKEN;
+  });
+  it("lets a user change their own password", async () => {
+    expect((await admin("/me/password", { body: { current: "bad", password: "An0therSecret!x" } })).status).toBe(400);
+    expect((await admin("/me/password", { body: { current: "N3wSecret!pass", password: "An0therSecret!x" } })).status).toBe(200);
+    expect((await admin("/login", { body: { email: "o@example.com", password: "An0therSecret!x" } })).status).toBe(200);
+  });
+});

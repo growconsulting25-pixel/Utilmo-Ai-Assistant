@@ -517,6 +517,42 @@ async function handleAuth(req: Request, path: string, ctx: AdminCtx): Promise<Re
     return json({ ok: true, user: { email: session.email, role: session.role } }, { headers: { "set-cookie": sessionCookie(token, 12 * 3600) } });
   }
   if (path === "/logout" && req.method === "POST") return json({ ok: true }, { headers: { "set-cookie": sessionCookie("", 0) } });
+  if (path === "/recover" && req.method === "POST") {
+    // One-time account recovery: requires ADMIN_RECOVERY_TOKEN (set by the site owner in Netlify).
+    // Each token value works once; creates or resets an OWNER account in the organization.
+    if (!(await rateLimit(`recover:${ipHash(ip)}`, 5, 900))) throw new HttpError(429, "rate_limited");
+    const b = await body(req, z.object({ token: z.string().min(1).max(500), email: z.string().email(), password: z.string(), name: z.string().max(100).optional(), organization: z.string().default("utilmo") }));
+    const { env } = await import("./env");
+    const { sha256, safeEqual: eq, hmac: h } = await import("./crypto");
+    const expected = env("ADMIN_RECOVERY_TOKEN");
+    if (!expected || expected.length < 16) throw new HttpError(503, "recovery_not_configured", "Set ADMIN_RECOVERY_TOKEN (16+ characters) in Netlify environment variables, redeploy, then use it here.");
+    if (!eq(h("recover", b.token), h("recover", expected))) { await audit(null, null, "admin.recovery_failed", null, null, {}, ip); throw new HttpError(403, "invalid_recovery_token"); }
+    const usedKey = "recovery_used:" + sha256(expected).slice(0, 32);
+    const used = await one(`SELECT 1 FROM app_secrets WHERE name = $1`, [usedKey]);
+    if (used) throw new HttpError(409, "recovery_token_used", "This recovery token was already used. Set a new ADMIN_RECOVERY_TOKEN value to recover again.");
+    const pwErr = validatePassword(b.password); if (pwErr) throw new HttpError(400, "weak_password", pwErr);
+    const org = await one<{ id: string }>(`SELECT id FROM organizations WHERE slug = $1`, [b.organization]);
+    if (!org) throw new HttpError(404, "organization_not_found");
+    const hash = await hashPassword(b.password);
+    const u = await one<{ id: string }>(
+      `INSERT INTO admin_users (organization_id, email, name, role, password_hash, active) VALUES ($1, lower($2), $3, 'owner', $4, true)
+       ON CONFLICT (email) DO UPDATE SET password_hash = $4, role = 'owner', active = true, failed_logins = 0, locked_until = NULL, organization_id = $1, name = coalesce($3, admin_users.name)
+       RETURNING id`, [org.id, b.email, b.name ?? null, hash]);
+    await getDb().query(`INSERT INTO app_secrets (name, value) VALUES ($1, 'used')`, [usedKey]);
+    await audit(org.id, u!.id, "admin.recovery", "admin_user", u!.id, {}, ip);
+    return json({ ok: true });
+  }
+  if (path === "/me/password" && req.method === "POST") {
+    const s = await requireAdmin(req);
+    const b = await body(req, z.object({ current: z.string().min(1).max(200), password: z.string().max(200) }));
+    const u = await one<{ password_hash: string }>(`SELECT password_hash FROM admin_users WHERE id = $1`, [s.uid]);
+    const { verifyPassword } = await import("./crypto");
+    if (!u || !(await verifyPassword(b.current, u.password_hash))) throw new HttpError(400, "invalid_current_password", "Current password is incorrect.");
+    const e = validatePassword(b.password); if (e) throw new HttpError(400, "weak_password", e);
+    await getDb().query(`UPDATE admin_users SET password_hash = $2 WHERE id = $1`, [s.uid, await hashPassword(b.password)]);
+    await audit(s.org, s.uid, "admin.password_changed", "admin_user", s.uid, {}, ip);
+    return json({ ok: true });
+  }
   if (path === "/me" && req.method === "GET") {
     const s = await requireAdmin(req);
     const org = await one<{ name: string; slug: string }>(`SELECT name, slug FROM organizations WHERE id = $1`, [s.org]);

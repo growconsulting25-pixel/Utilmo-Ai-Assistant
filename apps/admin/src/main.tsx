@@ -67,6 +67,11 @@ function App() {
     knowledge: <Knowledge tab={rest[0]} role={role} />, services: <Services role={role} />, tickets: <Tickets role={role} />,
     integrations: <Integrations role={role} />, settings: <SettingsPage role={role} />, embed: <Embed />, users: <UsersPage me={me} />, audit: <Audit />,
   };
+  const changePassword = async () => {
+    const current = prompt("Mot de passe actuel"); if (!current) return;
+    const next = prompt("Nouveau mot de passe (12 caractères min., majuscule, minuscule et chiffre)"); if (!next) return;
+    try { await api("/me/password", { body: { current, password: next } }); alert("Mot de passe modifié."); } catch (e) { alert((e as Error).message); }
+  };
   const logout = async () => { await api("/logout", { method: "POST" }).catch(() => {}); setMe(null); };
   return (
     <div className="flex min-h-screen">
@@ -89,7 +94,8 @@ function App() {
         <div className="border-t border-slate-200 p-4 text-xs text-slate-500">
           <div className="truncate font-semibold text-slate-700">{me.user.email}</div>
           <div>{me.organization?.name} · {role}</div>
-          <button className="mt-3 inline-flex items-center gap-1.5 text-slate-600 hover:text-brand" onClick={logout}><LogOut size={14} /> Déconnexion</button>
+          <button className="mt-3 block text-slate-600 hover:text-brand" onClick={changePassword}>Changer mon mot de passe</button>
+          <button className="mt-2 inline-flex items-center gap-1.5 text-slate-600 hover:text-brand" onClick={logout}><LogOut size={14} /> Déconnexion</button>
         </div>
       </aside>
       <main className="min-w-0 flex-1">

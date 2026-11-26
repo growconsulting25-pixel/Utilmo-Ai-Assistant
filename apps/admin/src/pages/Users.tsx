@@ -13,12 +13,13 @@ export function UsersPage({ me }: { me: Me }) {
   return (
     <>
       <PageHeader title="Utilisateurs" subtitle="Rôles : propriétaire > admin (paramètres, exports, intégrations) > éditeur (connaissances, leads) > lecteur." actions={<button className="btn-primary" onClick={() => setAdd(true)}>+ Utilisateur</button>} />
-      {loading ? <Loading /> : <div className="card overflow-x-auto"><table className="w-full"><thead className="border-b bg-slate-50"><tr><th className="th">Courriel</th><th className="th">Rôle</th><th className="th">Actif</th><th className="th">Dernière connexion</th></tr></thead>
+      {loading ? <Loading /> : <div className="card overflow-x-auto"><table className="w-full"><thead className="border-b bg-slate-50"><tr><th className="th">Courriel</th><th className="th">Rôle</th><th className="th">Actif</th><th className="th">Dernière connexion</th><th className="th" /></tr></thead>
         <tbody className="divide-y divide-slate-100">{(data?.items ?? []).map((u: any) => (
           <tr key={u.id}><td className="td">{u.email}<div className="text-xs text-slate-500">{u.name}</div></td>
             <td className="td">{u.role === "owner" || u.id === me.user.id ? u.role : <select className="input w-auto" value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>{["admin", "editor", "viewer"].map((r) => <option key={r}>{r}</option>)}</select>}</td>
             <td className="td">{u.id === me.user.id ? "oui" : <input type="checkbox" aria-label="Actif" checked={u.active} onChange={(e) => patch(u.id, { active: e.target.checked })} />}</td>
-            <td className="td text-xs">{fmtDate(u.last_login_at)}</td></tr>))}</tbody></table></div>}
+            <td className="td text-xs">{fmtDate(u.last_login_at)}</td>
+            <td className="td">{u.id !== me.user.id && (u.role !== "owner" || me.user.role === "owner") && <button className="btn-secondary" onClick={() => { const pw = prompt(`Nouveau mot de passe pour ${u.email} (12 caractères min., majuscule, minuscule et chiffre)`); if (pw) patch(u.id, { password: pw }); }}>Réinitialiser le mot de passe</button>}</td></tr>))}</tbody></table></div>}
       {add && <Modal title="Nouvel utilisateur" onClose={() => setAdd(false)}><div className="space-y-3"><ErrorBox error={err} />
         <Field label="Courriel"><input className="input" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         <Field label="Nom"><input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
