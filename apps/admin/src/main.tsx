@@ -1,7 +1,7 @@
 import React, { StrictMode, useEffect, useState } from "react";
 import { getLang, setLang, tr } from "./i18n";
 import { createRoot } from "react-dom/client";
-import { BarChart3, BookOpen, UserCog, Code2, LifeBuoy, LogOut, MessagesSquare, Plug, ScrollText, Settings, Sparkles, Users, UserRound, Menu } from "lucide-react";
+import { BarChart3, Bell, BookOpen, UserCog, Code2, LifeBuoy, LogOut, MessagesSquare, Plug, ScrollText, Settings, Sparkles, Users, UserRound, Menu } from "lucide-react";
 import "./index.css";
 import { api, getAssistant, setAssistant } from "./api";
 import { Login } from "./pages/Login";
@@ -17,6 +17,7 @@ import { Embed } from "./pages/Embed";
 import { UsersPage } from "./pages/Users";
 import { Audit } from "./pages/Audit";
 import { Profile } from "./pages/Profile";
+import { Notifications } from "./pages/Notifications";
 
 export interface Me { user: { id: string; email: string; role: "owner" | "admin" | "editor" | "viewer"; name?: string | null; avatar?: string | null; ui_language?: "fr" | "en" }; organization: { name: string; slug: string } }
 
@@ -28,6 +29,7 @@ const NAV = [
   { id: "services", label: tr("Recommandations"), icon: Sparkles },
   { id: "tickets", label: tr("Soutien"), icon: LifeBuoy },
   { id: "integrations", label: tr("Intégrations"), icon: Plug },
+  { id: "notifications", label: "Notifications", icon: Bell, minRole: "admin" },
   { id: "settings", label: tr("Comportement & apparence"), icon: Settings },
   { id: "embed", label: tr("Intégration du widget"), icon: Code2 },
   { id: "users", label: tr("Utilisateurs"), icon: Users, minRole: "admin" },
@@ -73,7 +75,7 @@ function App() {
     dashboard: <Dashboard />, conversations: <Conversations id={rest[0]} role={role} />, leads: <Leads id={rest[0]} role={role} />,
     knowledge: <Knowledge tab={rest[0]} role={role} />, services: <Services role={role} />, tickets: <Tickets role={role} />,
     integrations: <Integrations role={role} />, settings: <SettingsPage role={role} />, embed: <Embed />, users: <UsersPage me={me} />, audit: <Audit />,
-    profile: <Profile me={me} onSaved={loadMe} />,
+    profile: <Profile me={me} onSaved={loadMe} />, notifications: <Notifications role={role} />,
   };
   const changePassword = async () => {
     const current = prompt("Mot de passe actuel"); if (!current) return;

@@ -277,3 +277,45 @@ describe("smart booking", () => {
     expect(r.actions.some((a) => a.type === "booking")).toBe(true);
   });
 });
+
+describe("human handoff: email notification + live takeover", () => {
+  it("emails the team with a conversation link, then a team member replies live and the AI pauses", async () => {
+    const { SMTPServer } = await import("smtp-server");
+    const received: { to: string[]; data: string }[] = [];
+    const smtp = new SMTPServer({ authOptional: true, secure: false, disabledCommands: ["STARTTLS"], onAuth: (_a, _s, cb) => cb(null, { user: "ok" }),
+      onData(stream, session, cb) { let d = ""; stream.on("data", (c) => (d += c)); stream.on("end", () => { received.push({ to: session.envelope.rcptTo.map((r) => r.address), data: d }); cb(); }); } });
+    await new Promise<void>((r) => smtp.listen(2526, "127.0.0.1", () => r()));
+    await admin("/login", { body: { email: "owner@example.com", password: "Sup3rSecret!pass" } });
+    const ints = (await admin("/integrations")).data.items;
+    const email = ints.find((i: { type: string }) => i.type === "email");
+    expect(email).toBeTruthy(); // seeded by migration, disabled
+    expect(email.config.to).toContain("support@utilmo.ca");
+    await admin(`/integrations/${email.id}`, { method: "PATCH", body: { enabled: true, config: { ...email.config, provider: "smtp", smtp_host: "127.0.0.1", smtp_port: 2526, smtp_user: "notif@example.com" }, secret: "app-password-123" } });
+
+    let r = await chat(bg, "Parler à un conseiller", null);
+    expect(r.done?.state).toBe("HUMAN_HANDOFF");
+    expect(received.length).toBe(1);
+    expect(received[0].to).toEqual(["support@marketingwebsites.ca", "jean@marketingwebsites.ca", "support@utilmo.ca"]);
+    expect(received[0].data).toMatch(/parler =C3=A0 quelqu|parler à quelqu/);
+    const decoded = received[0].data.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
+    expect(decoded).toContain(`/admin/#/conversations/${r.conversationId}`);
+
+    // Team member takes over and replies.
+    expect((await admin(`/conversations/${r.conversationId}/takeover`, { body: { active: true } })).status).toBe(200);
+    expect((await admin(`/conversations/${r.conversationId}/messages`, { body: { content: "Bonjour, ici Jean de l'équipe !" } })).status).toBe(200);
+    const s = await restore(r.token!);
+    expect(s.conversation.humanActive).toBe(true);
+    expect(s.messages.some((m: { role: string; content: string }) => m.role === "agent" && m.content.includes("ici Jean"))).toBe(true);
+    // Visitor writes: stored, no AI reply while the human is active.
+    const before = await one<{ n: number }>(`SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1 AND role = 'assistant'`, [r.conversationId]);
+    r = await chat(bg, "Merci Jean, j'ai une question sur Centris", r.token);
+    expect(r.reply).toBe("");
+    const after = await one<{ n: number }>(`SELECT count(*)::int AS n FROM messages WHERE conversation_id = $1 AND role = 'assistant'`, [r.conversationId]);
+    expect(after!.n).toBe(before!.n);
+    // Hand back to the AI.
+    await admin(`/conversations/${r.conversationId}/takeover`, { body: { active: false } });
+    r = await chat(bg, "Et le prix du CRM ?", r.token);
+    expect(r.reply).toMatch(/TEST DOUBLE/);
+    smtp.close();
+  });
+});

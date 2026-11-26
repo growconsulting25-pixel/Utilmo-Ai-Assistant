@@ -23,10 +23,11 @@ export class SqlChatStore implements ChatStore {
   constructor(private orgId: string, private assistantId: string, private visitorId: string) {}
 
   async recentMessages(conversationId: string, limit: number) {
-    const rows = await many<{ role: "user" | "assistant"; content: string }>(
-      `SELECT role, content FROM (SELECT role, content, created_at FROM messages WHERE conversation_id = $1 AND organization_id = $2 AND role IN ('user','assistant') ORDER BY created_at DESC LIMIT $3) t ORDER BY created_at ASC`,
+    const rows = await many<{ role: "user" | "assistant" | "agent"; content: string }>(
+      `SELECT role, content FROM (SELECT role, content, created_at FROM messages WHERE conversation_id = $1 AND organization_id = $2 AND role IN ('user','assistant','agent') ORDER BY created_at DESC LIMIT $3) t ORDER BY created_at ASC`,
       [conversationId, this.orgId, limit]);
-    return rows;
+    // Team-member replies are shown to the model as assistant turns (marked) so the AI keeps context after a takeover.
+    return rows.map((r) => (r.role === "agent" ? { role: "assistant" as const, content: `[Réponse d'un membre de l'équipe] ${r.content}` } : { role: r.role as "user" | "assistant", content: r.content }));
   }
 
   async addMessage(conversationId: string, role: "user" | "assistant", content: string, metadata: Record<string, unknown>, clientMessageId?: string) {

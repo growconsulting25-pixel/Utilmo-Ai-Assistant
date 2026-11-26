@@ -108,6 +108,31 @@ route("PATCH", "/conversations/:id", "editor", async (req, p, s) => {
   await audit(s.org, s.uid, "conversation.update", "conversation", p.id, b);
   return json({ ok: true });
 });
+route("POST", "/conversations/:id/takeover", "editor", async (req, p, s) => {
+  const b = await body(req, z.object({ active: z.boolean() }));
+  const me = await one<{ name: string | null; email: string }>(`SELECT name, email FROM admin_users WHERE id = $1`, [s.uid]);
+  const raw = (me?.name || me?.email.split("@")[0] || "Équipe").split(/[ .]/)[0];
+  const agent = raw.charAt(0).toUpperCase() + raw.slice(1);
+  const c = await one<{ id: string }>(`UPDATE conversations SET human_active = $3, human_agent_name = CASE WHEN $3 THEN $4 ELSE human_agent_name END,
+      escalation_status = CASE WHEN $3 AND escalation_status IN ('none','requested') THEN 'requested' ELSE escalation_status END, status = CASE WHEN $3 THEN 'handoff' ELSE 'open' END, updated_at = now()
+    WHERE id = $1 AND organization_id = $2 RETURNING id`, [uuid.parse(p.id), s.org, b.active, agent]);
+  if (!c) throw new HttpError(404, "not_found");
+  await getDb().query(`INSERT INTO messages (organization_id, conversation_id, role, content, metadata) VALUES ($1,$2,'event',$3,$4)`,
+    [s.org, p.id, b.active ? `${agent} a rejoint la conversation` : `${agent} a rendu la conversation à l'assistant`, JSON.stringify({ kind: b.active ? "agent_joined" : "agent_left", agent_name: agent })]);
+  await audit(s.org, s.uid, b.active ? "conversation.takeover" : "conversation.release", "conversation", p.id);
+  return json({ ok: true, agent });
+});
+route("POST", "/conversations/:id/messages", "editor", async (req, p, s) => {
+  const b = await body(req, z.object({ content: z.string().min(1).max(4000) }));
+  const c = await one<{ human_active: boolean; human_agent_name: string | null }>(`SELECT human_active, human_agent_name FROM conversations WHERE id = $1 AND organization_id = $2`, [uuid.parse(p.id), s.org]);
+  if (!c) throw new HttpError(404, "not_found");
+  if (!c.human_active) throw new HttpError(409, "takeover_required", "Take over the conversation first.");
+  const me = await one<{ name: string | null; email: string }>(`SELECT name, email FROM admin_users WHERE id = $1`, [s.uid]);
+  const agent = c.human_agent_name || (me?.name || me?.email.split("@")[0] || "Équipe").split(" ")[0];
+  const m = await one<{ id: string }>(`INSERT INTO messages (organization_id, conversation_id, role, content, metadata) VALUES ($1,$2,'agent',$3,$4) RETURNING id`, [s.org, p.id, b.content, JSON.stringify({ agent_name: agent, admin_user_id: s.uid })]);
+  await getDb().query(`UPDATE conversations SET message_count = message_count + 1, last_message_at = now(), updated_at = now() WHERE id = $1`, [p.id]);
+  return json({ id: m!.id });
+});
 route("DELETE", "/conversations/:id", "admin", async (_req, p, s) => {
   await getDb().query(`DELETE FROM conversations WHERE id = $1 AND organization_id = $2`, [uuid.parse(p.id), s.org]);
   await audit(s.org, s.uid, "privacy.conversation_deleted", "conversation", p.id);
@@ -413,7 +438,7 @@ route("PATCH", "/tickets/:id", "editor", async (req, p, s) => {
 // ------------------------------------------------------------------ integrations
 const IntegrationBody = z.object({
   type: z.enum(["webhook", "zapier", "make", "highlevel", "utilmo_crm", "email", "cal_com", "calendly"]), name: z.string().min(2).max(100), enabled: z.boolean().default(false),
-  config: z.object({ url: z.string().url().optional(), events: z.array(z.enum(["lead.captured", "lead.qualified", "support.ticket_created"])).default([]), field_mapping: z.record(z.string(), z.string()).optional(), location_id: z.string().max(100).optional(), to: z.string().max(500).optional(), from: z.string().max(200).optional() }).default({ events: [] }),
+  config: z.object({ url: z.string().url().optional(), events: z.array(z.enum(["lead.captured", "lead.qualified", "support.ticket_created", "human.requested"])).default([]), field_mapping: z.record(z.string(), z.string()).optional(), location_id: z.string().max(100).optional(), to: z.string().max(1000).optional(), from: z.string().max(200).optional(), provider: z.enum(["smtp", "resend"]).optional(), smtp_host: z.string().max(200).optional(), smtp_port: z.number().int().min(1).max(65535).optional(), smtp_user: z.string().max(200).optional() }).default({ events: [] }),
   secret: z.string().max(2000).optional(),
 });
 function maskIntegration(i: Record<string, unknown>) { const { secret_encrypted, ...rest } = i; return { ...rest, has_secret: !!secret_encrypted }; }

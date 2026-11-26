@@ -107,6 +107,15 @@ export async function handleChat(req: Request, ctx: Ctx = {}): Promise<Response>
       }
     }
 
+    // Live human takeover: an advisor is answering from the admin — store the message, no AI reply.
+    if ((row as ConversationRow & { human_active?: boolean }).human_active) {
+      const { redactSecrets } = await import("../packages/ai-core/src/injection");
+      if (!prior) await getDb().query(`INSERT INTO messages (organization_id, conversation_id, role, content, metadata, client_message_id) VALUES ($1,$2,'user',$3,'{}'::jsonb,$4)`, [a.organizationId, row.id, redactSecrets(input.message).slice(0, settings.limits.maxMessageChars), input.clientMessageId]);
+      await getDb().query(`UPDATE conversations SET message_count = message_count + 1, last_message_at = now(), updated_at = now() WHERE id = $1`, [row.id]);
+      const ev: ChatStreamEvent[] = [{ type: "session", sessionToken: token, conversationId: row.id }, { type: "done", messageId: "", state: "HUMAN_HANDOFF", language: (row.language === "en" ? "en" : "fr") }];
+      return new Response(ev.map((e) => JSON.stringify(e)).join("\n") + "\n", { headers: { ...cors, "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
+    }
+
     // Per-conversation lock: prevents duplicate simultaneous replies (e.g. inline + floating, two tabs).
     const locked = await one<{ id: string }>(`UPDATE conversations SET processing_until = now() + interval '75 seconds' WHERE id = $1 AND (processing_until IS NULL OR processing_until < now()) RETURNING id`, [row.id]);
     if (!locked) throw new HttpError(409, "busy", "A reply is already being generated for this conversation.");
@@ -126,7 +135,7 @@ export async function handleChat(req: Request, ctx: Ctx = {}): Promise<Response>
           await runTurn({
             settings, llm, store, services, background,
             search: (queries, o) => searchKnowledge(a.id, queries, { ...o, embedder }),
-            emitWebhook: (event, payload, key) => enqueueEvent(a.organizationId, a.id, event, payload, key).then(() => undefined),
+            emitWebhook: (event, payload, key) => enqueueEvent(a.organizationId, a.id, event, { ...payload, admin_url: `${new URL(req.url).origin}/admin/#/conversations/${row.id}` }, key).then(() => undefined),
             log: (m, extra) => console.warn(`[chat] ${m}`, JSON.stringify(extra ?? {})),
           }, { conversation: toRecord(row), message: input.message, clientMessageId: input.clientMessageId, languageHint: input.language, userMessageAlreadyStored: !!prior }, emit);
         } catch (err) {
@@ -154,10 +163,11 @@ export async function handleSessionGet(req: Request): Promise<Response> {
     if (!claims) return json({ conversation: null }, { headers: cors });
     const conv = await one<ConversationRow & { processing_until: string | null }>(`SELECT * FROM conversations WHERE id = $1 AND visitor_id = $2 AND assistant_id = $3 AND status <> 'deleted'`, [claims.c, claims.v, r.a.id]);
     if (!conv) return json({ conversation: null }, { headers: cors });
-    const msgs = await many<{ id: string; role: "user" | "assistant"; content: string; metadata: { actions?: unknown[] }; created_at: string; client_message_id: string | null }>(
-      `SELECT id, role, content, metadata, created_at, client_message_id FROM messages WHERE conversation_id = $1 AND role IN ('user','assistant') ORDER BY created_at ASC LIMIT 200`, [conv.id]);
-    const messages: StoredMessage[] = msgs.map((m) => ({ id: m.id, role: m.role, content: m.content, actions: m.role === "assistant" ? (m.metadata.actions as StoredMessage["actions"]) : undefined, createdAt: m.created_at, clientMessageId: m.client_message_id ?? undefined }));
-    return json({ conversation: { id: conv.id, state: conv.state, language: conv.language, status: conv.status, busy: !!conv.processing_until && new Date(conv.processing_until) > new Date() }, messages }, { headers: cors });
+    const msgs = await many<{ id: string; role: "user" | "assistant" | "agent"; content: string; metadata: { actions?: unknown[]; agent_name?: string }; created_at: string; client_message_id: string | null }>(
+      `SELECT id, role, content, metadata, created_at, client_message_id FROM messages WHERE conversation_id = $1 AND role IN ('user','assistant','agent') ORDER BY created_at ASC LIMIT 300`, [conv.id]);
+    const messages: StoredMessage[] = msgs.map((m) => ({ id: m.id, role: m.role, content: m.content, actions: m.role === "assistant" ? (m.metadata.actions as StoredMessage["actions"]) : undefined, createdAt: m.created_at, clientMessageId: m.client_message_id ?? undefined, agentName: m.role === "agent" ? (m.metadata.agent_name ?? "Équipe") : undefined }));
+    const c2 = conv as typeof conv & { human_active?: boolean; human_agent_name?: string | null };
+    return json({ conversation: { id: conv.id, state: conv.state, language: conv.language, status: conv.status, busy: !!conv.processing_until && new Date(conv.processing_until) > new Date(), humanActive: !!c2.human_active, agentName: c2.human_agent_name ?? null, handoff: conv.escalation_status !== "none" }, messages }, { headers: cors });
   } catch (e) { return errorResponse(e, cors); }
 }
 

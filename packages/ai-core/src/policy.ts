@@ -113,7 +113,7 @@ export function decide(input: PolicyInput): PolicyDecision {
     d.state = "HUMAN_HANDOFF";
     d.handoff = true;
     d.offerBooking = input.bookingAvailable && !isCustomer;
-    guidance.push(`The visitor wants to talk to a person. Acknowledge it, give the official phone number (${s.behavior.escalation.salesPhone || s.behavior.escalation.supportPhone || "see contact page"})${input.bookingAvailable && !isCustomer ? " and mention they can book a call with the booking button" : ""}.`);
+    guidance.push(`The visitor wants to talk to a person. Say in one short sentence that the team has just been notified and an advisor may join this chat shortly. Then give the official phone number (${s.behavior.escalation.salesPhone || s.behavior.escalation.supportPhone || "see contact page"})${input.bookingAvailable && !isCustomer ? " and mention they can book a call with the booking button" : ""}.`);
     if (!contact.name || !(contact.phone || contact.email)) {
       d.askField = !contact.name ? "first_name" : !contact.phone ? "phone" : "email";
       guidance.push("Offer to have the team call them back and ask for the single missing detail below. If they prefer not to, that is fine.");

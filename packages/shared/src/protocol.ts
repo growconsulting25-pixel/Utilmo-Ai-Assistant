@@ -38,7 +38,8 @@ export type ChatStreamEvent =
 
 export interface StoredMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "agent";
+  agentName?: string;
   content: string;
   actions?: ChatAction[];
   createdAt: string;

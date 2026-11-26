@@ -46,7 +46,7 @@ export interface TurnDeps {
   store: ChatStore;
   services: ServiceDef[];
   search: (queries: string[], opts: { collection: "sales" | "support"; topK: number }) => Promise<RetrievedChunk[]>;
-  emitWebhook: (event: "lead.captured" | "lead.qualified" | "support.ticket_created", payload: Record<string, unknown>, idempotencyKey: string) => Promise<void>;
+  emitWebhook: (event: "lead.captured" | "lead.qualified" | "support.ticket_created" | "human.requested", payload: Record<string, unknown>, idempotencyKey: string) => Promise<void>;
   background: (p: Promise<unknown>) => void;
   log?: (msg: string, extra?: Record<string, unknown>) => void;
 }
@@ -120,6 +120,9 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   const langs = s.behavior.languages;
   if (!langs.autoDetect) language = input.languageHint && langs.enabled.includes(input.languageHint) ? input.languageHint : s.behavior.defaultLanguage;
   if (!langs.enabled.includes(language)) language = langs.enabled.includes(s.behavior.defaultLanguage) ? s.behavior.defaultLanguage : langs.enabled[0];
+  if (/^(parler à (un conseiller|quelqu'un|un humain)|talk to (an advisor|someone|a human))$/i.test(message.trim())) {
+    analysis = { ...analysis, wants_human: true, intents: Array.from(new Set([...analysis.intents, "HUMAN_REQUEST" as const])) };
+  }
   if (looksLikeInjection(message) && !analysis.intents.includes("PROMPT_INJECTION")) analysis.intents.push("PROMPT_INJECTION");
   if (hadSecret && !analysis.intents.includes("SENSITIVE_REQUEST")) analysis.intents.push("SENSITIVE_REQUEST");
   if (analysis.intents.length) void store.track("intent_detected", { intents: analysis.intents, categories: analysis.categories }, conv.id);
@@ -215,7 +218,11 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
       decision.guidance = decision.guidance.filter((g) => !/ask ONE question|single missing/.test(g));
       decision.guidance.push("Do not ask further qualification questions. Reply in 1-2 very short sentences (max 30 words), no links. When relevant, invite them to book a demo with the button.");
       // Booking only when it is smart: explicit request (handled by policy), or after several questions.
-      if (bookingAvailable && !supportMode && qCount >= 3) { decision.offerBooking = true; decision.guidance.push("The visitor has asked several questions: in one short sentence, suggest booking a free demo with an expert (button shown below)."); }
+      if (!supportMode && qCount >= 3) {
+        decision.offerBooking = bookingAvailable;
+        decision.suggestions = { fr: ["Parler à un conseiller"], en: ["Talk to an advisor"] };
+        decision.guidance.push("The visitor has asked several questions: after your short answer, in one short sentence suggest booking a free demo with an expert or talking to an advisor now (buttons are shown below).");
+      }
     }
     profile = markAsked(profile, decision.askField);
   }
@@ -351,7 +358,10 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
     void store.track("support_requested", {}, conv.id);
   }
   if (decision.handoff) {
-    if (escalationStatus === "none") escalationStatus = "requested";
+    if (escalationStatus === "none") {
+      escalationStatus = "requested";
+      deps.background(deps.emitWebhook("human.requested", { conversation_id: conv.id, lead_id: leadId, profile, last_message: message.slice(0, 500), summary: conv.summary }, `human.requested:${conv.id}`));
+    }
     actions.push({ type: "handoff", phone: s.behavior.escalation.salesPhone || s.behavior.escalation.supportPhone || undefined, email: s.behavior.escalation.supportEmail || undefined });
   }
   if (decision.offerBooking && bookingAvailable) profile.flags = { ...(profile.flags ?? {}), q_since_offer: 0 } as typeof profile.flags;

@@ -43,7 +43,7 @@ export function Header({ store, state, children }: { store: WidgetStore; state: 
       <Avatar store={store} size={40} />
       <div class="u-header-text">
         <div class="u-title">{s?.assistantName ?? "Assistant"}</div>
-        <div class="u-subtitle"><span class="u-dot" aria-hidden="true" />{t.online}</div>
+        <div class="u-subtitle"><span class="u-dot" aria-hidden="true" />{state.humanActive && state.agentName ? (state.language === "fr" ? `${state.agentName} de l'équipe est en ligne` : `${state.agentName} from the team is online`) : t.online}</div>
       </div>
       <div class="u-header-actions">
         {s?.booking.enabled && (
@@ -106,6 +106,12 @@ function Message({ m, store, state, isLast }: { m: UIMessage; store: WidgetStore
   const t = STRINGS[state.language];
   const hosts = state.config?.approvedLinkHosts ?? [];
   if (m.role === "user") return <div class="u-row u-row-user"><div class="u-bubble u-user"><span class="u-sr">{t.you}: </span>{m.content}</div></div>;
+  if (m.role === "agent") return (
+    <div class="u-row u-row-bot"><div class="u-bot-col">
+      <div class="u-agent-name">{m.agentName ?? "Équipe"} · {state.config?.settings.companyName ?? ""}</div>
+      <div class="u-bubble u-bot u-agent">{renderMarkdown(m.content, hosts)}</div>
+    </div></div>
+  );
   const showTyping = m.status === "streaming" && !m.content;
   return (
     <div class="u-row u-row-bot">
@@ -166,6 +172,7 @@ export function Composer({ store, state, surface, autoFocus }: { store: WidgetSt
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   const max = state.config?.settings.maxMessageChars ?? 2000;
+  const placeholder = state.humanActive && state.agentName ? (state.language === "fr" ? `Écrivez à ${state.agentName}…` : `Write to ${state.agentName}…`) : t.placeholder;
   const busy = state.status !== "idle";
   const disabled = !state.config;
   useEffect(() => { if (autoFocus) ref.current?.focus(); }, [autoFocus]);
@@ -180,7 +187,7 @@ export function Composer({ store, state, surface, autoFocus }: { store: WidgetSt
     <div class="u-footer">
       <form class="u-composer" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <label class="u-sr" for={`u-input-${surface}`}>{t.placeholder}</label>
-        <textarea id={`u-input-${surface}`} ref={ref} rows={1} maxLength={max} placeholder={t.placeholder} value={text} disabled={disabled}
+        <textarea id={`u-input-${surface}`} ref={ref} rows={1} maxLength={max} placeholder={placeholder} value={text} disabled={disabled}
           onInput={(e) => { setText((e.target as HTMLTextAreaElement).value); resize(); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } }} />
         <button type="submit" class="u-send" aria-label={t.send} disabled={busy || !text.trim() || disabled}><IconSend /></button>

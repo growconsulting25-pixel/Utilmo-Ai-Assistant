@@ -3,7 +3,8 @@ import type { ChatAction, StoredMessage } from "./types";
 
 export interface UIMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "agent";
+  agentName?: string;
   content: string;
   actions?: ChatAction[];
   status: "done" | "streaming" | "error";
@@ -24,6 +25,9 @@ export interface WidgetState {
   floatingOpen: boolean;
   unread: number;
   inlineVisible: boolean;
+  humanActive: boolean;
+  agentName: string | null;
+  handoff: boolean;
 }
 
 type Listener = (s: WidgetState) => void;
@@ -46,7 +50,7 @@ export class WidgetStore {
 
   constructor(public api: Api, language?: "fr" | "en") {
     this.key = `utilmo-ai:v1:${api.assistantId}`;
-    this.state = { ready: false, configError: null, config: null, language: language ?? "fr", messages: [], status: "idle", phase: null, token: null, conversationId: null, floatingOpen: false, unread: 0, inlineVisible: false };
+    this.state = { ready: false, configError: null, config: null, language: language ?? "fr", messages: [], status: "idle", phase: null, token: null, conversationId: null, floatingOpen: false, unread: 0, inlineVisible: false, humanActive: false, agentName: null, handoff: false };
     this.languageForced = !!language;
     this.loadLocal();
     window.addEventListener("storage", (e) => { if (e.key === this.key && this.state.status === "idle") { this.loadLocal(); this.emit(); } });
@@ -84,8 +88,12 @@ export class WidgetStore {
     try {
       const r = await this.api.restore(this.state.token);
       if (!r.conversation) { this.set({ token: null, conversationId: null, messages: [] }); this.saveLocal(); return; }
-      const messages: UIMessage[] = (r.messages ?? []).map((m: StoredMessage) => ({ id: m.id, role: m.role, content: m.content, actions: m.actions, status: "done", clientMessageId: m.clientMessageId }));
-      this.set({ messages, conversationId: r.conversation.id, language: this.languageForced ? this.state.language : (r.conversation.language === "en" ? "en" : "fr") });
+      const messages: UIMessage[] = (r.messages ?? []).map((m: StoredMessage) => ({ id: m.id, role: m.role, agentName: m.agentName, content: m.content, actions: m.actions, status: "done", clientMessageId: m.clientMessageId }));
+      const c = r.conversation as typeof r.conversation & { humanActive?: boolean; agentName?: string | null; handoff?: boolean };
+      const newAgentMsgs = messages.filter((m) => m.role === "agent").length - this.state.messages.filter((m) => m.role === "agent").length;
+      this.set({ messages, conversationId: c.id, humanActive: !!c.humanActive, agentName: c.agentName ?? null, handoff: !!c.handoff, language: this.languageForced ? this.state.language : (c.language === "en" ? "en" : "fr") });
+      if (newAgentMsgs > 0 && !this.state.floatingOpen && !this.state.inlineVisible) this.set({ unread: this.state.unread + newAgentMsgs });
+      this.ensurePolling();
       this.saveLocal();
     } catch { /* keep local copy */ }
   }
@@ -114,10 +122,13 @@ export class WidgetStore {
         else if (ev.type === "replace") { got = ev.text; this.patchMsg(assistant.id, { content: got }); }
         else if (ev.type === "actions") { this.patchMsg(assistant.id, { actions: ev.actions }); if (ev.actions.some((a) => a.type === "contact_saved")) this.fire("lead", { conversationId: this.state.conversationId }); }
         else if (ev.type === "done") {
+          if (!ev.messageId) { this.set({ messages: this.state.messages.filter((m) => m.id !== assistant.id) }); if (ev.state === "HUMAN_HANDOFF") this.set({ handoff: true }); return; }
           this.patchMsg(assistant.id, { status: "done", id: ev.messageId });
+          if (ev.state === "HUMAN_HANDOFF") this.set({ handoff: true });
           if (!this.languageForced) this.set({ language: ev.language });
         } else if (ev.type === "error") throw new ApiError(500, ev.code, ev.message);
       }, this.abort.signal);
+      this.ensurePolling();
       const last = this.state.messages.find((m) => m.id === assistant.id);
       if (last && last.status === "streaming") this.patchMsg(assistant.id, { status: got ? "done" : "error", errorCode: got ? undefined : "empty" });
       this.fire("message", { role: "assistant", content: got });
@@ -133,6 +144,15 @@ export class WidgetStore {
     }
   }
 
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  /** While a human handoff is in progress, poll the server so advisor replies appear live. */
+  ensurePolling() {
+    const want = (this.state.handoff || this.state.humanActive) && !!this.state.token;
+    if (want && !this.pollTimer) {
+      this.pollTimer = setInterval(() => { if (document.visibilityState === "visible" && this.state.status === "idle") void this.syncFromServer(); }, 4000);
+    } else if (!want && this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; }
+  }
+
   retry(failed: UIMessage) {
     const idx = this.state.messages.findIndex((m) => m.id === failed.id);
     const user = [...this.state.messages.slice(0, idx)].reverse().find((m) => m.role === "user");
@@ -145,7 +165,8 @@ export class WidgetStore {
 
   reset() {
     this.abort?.abort();
-    this.set({ messages: [], token: null, conversationId: null, status: "idle", phase: null, unread: 0 });
+    this.set({ messages: [], token: null, conversationId: null, status: "idle", phase: null, unread: 0, humanActive: false, agentName: null, handoff: false });
+    this.ensurePolling();
     this.saveLocal();
   }
 
