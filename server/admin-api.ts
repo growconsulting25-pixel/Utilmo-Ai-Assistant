@@ -486,11 +486,25 @@ route("POST", "/deliveries/:id/retry", "editor", async (_req, p, s) => {
 // ------------------------------------------------------------------ users & audit
 route("GET", "/users", "admin", async (_req, _p, s) => json({ items: await many(`SELECT id, email, name, role, active, last_login_at, created_at FROM admin_users WHERE organization_id = $1 ORDER BY created_at`, [s.org]) }));
 route("POST", "/users", "admin", async (req, _p, s) => {
-  const b = await body(req, z.object({ email: z.string().email(), name: z.string().max(100).optional(), role: z.enum(["admin", "editor", "viewer"]), password: z.string() }));
-  const pwErr = validatePassword(b.password); if (pwErr) throw new HttpError(400, "weak_password", pwErr);
-  const r = await one<{ id: string }>(`INSERT INTO admin_users (organization_id, email, name, role, password_hash) VALUES ($1, lower($2), $3, $4, $5) RETURNING id`, [s.org, b.email, b.name ?? null, b.role, await hashPassword(b.password)]).catch(() => { throw new HttpError(409, "email_taken"); });
-  await audit(s.org, s.uid, "user.create", "admin_user", r!.id, { role: b.role });
-  return json({ id: r!.id });
+  const b = await body(req, z.object({ email: z.string().email(), name: z.string().max(100).optional(), role: z.enum(["admin", "editor", "viewer"]), password: z.string().optional() }));
+  const { randomToken, sha256 } = await import("./crypto");
+  // Without a password, the user receives an invitation e-mail to choose it (link valid 72 h).
+  if (b.password) { const pwErr = validatePassword(b.password); if (pwErr) throw new HttpError(400, "weak_password", pwErr); }
+  const r = await one<{ id: string }>(`INSERT INTO admin_users (organization_id, email, name, role, password_hash) VALUES ($1, lower($2), $3, $4, $5) RETURNING id`,
+    [s.org, b.email, b.name ?? null, b.role, await hashPassword(b.password || randomToken(32))]).catch(() => { throw new HttpError(409, "email_taken"); });
+  let invited = false;
+  if (!b.password) {
+    const token = randomToken(32);
+    await getDb().query(`INSERT INTO password_resets (admin_user_id, token_hash, purpose, expires_at) VALUES ($1,$2,'invite', now() + interval '72 hours')`, [r!.id, sha256(token)]);
+    const base = new URL(req.url).origin;
+    const me = await one<{ name: string | null; email: string }>(`SELECT name, email FROM admin_users WHERE id = $1`, [s.uid]);
+    const org = await one<{ name: string }>(`SELECT name FROM organizations WHERE id = $1`, [s.org]);
+    const { accountEmail, sendSystemEmail } = await import("./webhooks");
+    invited = await sendSystemEmail(s.org, b.email.toLowerCase(), accountEmail(base, "invite", `${base}/admin/#/reset?token=${token}`, { inviter: me?.name || me?.email, org: org?.name }));
+    if (!invited) { await getDb().query(`DELETE FROM admin_users WHERE id = $1`, [r!.id]); throw new HttpError(503, "email_not_configured", "L'envoi de courriels n'est pas configuré (Notifications). Configurez-le ou indiquez un mot de passe initial. / Email sending is not configured: set it up in Notifications or provide an initial password."); }
+  }
+  await audit(s.org, s.uid, "user.create", "admin_user", r!.id, { role: b.role, invited });
+  return json({ id: r!.id, invited });
 });
 route("PATCH", "/users/:id", "admin", async (req, p, s) => {
   const b = await body(req, z.object({ role: z.enum(["admin", "editor", "viewer"]).optional(), active: z.boolean().optional(), password: z.string().optional() }));
@@ -571,6 +585,35 @@ async function handleAuth(req: Request, path: string, ctx: AdminCtx): Promise<Re
     await getDb().query(`INSERT INTO app_secrets (name, value) VALUES ($1, 'used')`, [usedKey]);
     await audit(org.id, u!.id, "admin.recovery", "admin_user", u!.id, {}, ip);
     return json({ ok: true });
+  }
+  if (path === "/forgot" && req.method === "POST") {
+    // Always answers OK (no account enumeration). Sends a single-use link valid 1 hour.
+    if (!(await rateLimit(`forgot:${ipHash(ip)}`, 5, 900))) throw new HttpError(429, "rate_limited");
+    const b = await body(req, z.object({ email: z.string().email().max(254) }));
+    const u = await one<{ id: string; organization_id: string; active: boolean }>(`SELECT id, organization_id, active FROM admin_users WHERE email = lower($1)`, [b.email]);
+    if (u?.active) {
+      const { randomToken, sha256 } = await import("./crypto");
+      const token = randomToken(32);
+      await getDb().query(`INSERT INTO password_resets (admin_user_id, token_hash, purpose, expires_at) VALUES ($1,$2,'reset', now() + interval '1 hour')`, [u.id, sha256(token)]);
+      const base = new URL(req.url).origin;
+      const { accountEmail, sendSystemEmail } = await import("./webhooks");
+      const sent = await sendSystemEmail(u.organization_id, b.email.toLowerCase(), accountEmail(base, "reset", `${base}/admin/#/reset?token=${token}`));
+      await audit(u.organization_id, u.id, "admin.password_reset_requested", "admin_user", u.id, { email_sent: sent }, ip);
+    }
+    return json({ ok: true });
+  }
+  if (path === "/reset" && req.method === "POST") {
+    if (!(await rateLimit(`reset:${ipHash(ip)}`, 10, 900))) throw new HttpError(429, "rate_limited");
+    const b = await body(req, z.object({ token: z.string().min(20).max(200), password: z.string().max(200) }));
+    const { sha256 } = await import("./crypto");
+    const r = await one<{ id: string; admin_user_id: string; purpose: string }>(`SELECT id, admin_user_id, purpose FROM password_resets WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()`, [sha256(b.token)]);
+    if (!r) throw new HttpError(400, "invalid_or_expired_link", "Ce lien est invalide ou expiré. / This link is invalid or expired.");
+    const e = validatePassword(b.password); if (e) throw new HttpError(400, "weak_password", e);
+    await getDb().query(`UPDATE admin_users SET password_hash = $2, active = true, failed_logins = 0, locked_until = NULL WHERE id = $1`, [r.admin_user_id, await hashPassword(b.password)]);
+    await getDb().query(`UPDATE password_resets SET used_at = now() WHERE admin_user_id = $1 AND used_at IS NULL`, [r.admin_user_id]);
+    const u = await one<{ organization_id: string; email: string }>(`SELECT organization_id, email FROM admin_users WHERE id = $1`, [r.admin_user_id]);
+    await audit(u!.organization_id, r.admin_user_id, r.purpose === "invite" ? "admin.invite_accepted" : "admin.password_reset", "admin_user", r.admin_user_id, {}, ip);
+    return json({ ok: true, email: u!.email });
   }
   if (path === "/me/password" && req.method === "POST") {
     const s = await requireAdmin(req);

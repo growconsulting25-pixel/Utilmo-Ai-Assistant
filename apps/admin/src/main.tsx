@@ -18,6 +18,7 @@ import { UsersPage } from "./pages/Users";
 import { Audit } from "./pages/Audit";
 import { Profile } from "./pages/Profile";
 import { Notifications } from "./pages/Notifications";
+import { ResetPassword } from "./pages/ResetPassword";
 
 export interface Me { user: { id: string; email: string; role: "owner" | "admin" | "editor" | "viewer"; name?: string | null; avatar?: string | null; ui_language?: "fr" | "en" }; organization: { name: string; slug: string } }
 
@@ -67,6 +68,7 @@ function App() {
     });
   }, [me]);
 
+  if (page.startsWith("reset")) return <ResetPassword />;
   if (me === undefined) return <div className="p-10 text-sm text-slate-500">{tr("Chargement…")}</div>;
   if (me === null) return <Login onLoggedIn={loadMe} />;
   const role = me.user.role;

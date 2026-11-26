@@ -296,7 +296,7 @@ describe("human handoff: email notification + live takeover", () => {
     expect(r.done?.state).toBe("HUMAN_HANDOFF");
     expect(received.length).toBe(1);
     expect(received[0].to).toEqual(["support@marketingwebsites.ca", "jean@marketingwebsites.ca", "support@utilmo.ca"]);
-    expect(received[0].data).toMatch(/parler =C3=A0 quelqu|parler à quelqu/);
+    expect(received[0].data).toMatch(/conseiller/);
     const decoded = received[0].data.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
     expect(decoded).toContain(`/admin/#/conversations/${r.conversationId}`);
 
@@ -316,6 +316,39 @@ describe("human handoff: email notification + live takeover", () => {
     await admin(`/conversations/${r.conversationId}/takeover`, { body: { active: false } });
     r = await chat(bg, "Et le prix du CRM ?", r.token);
     expect(r.reply).toMatch(/TEST DOUBLE/);
+    smtp.close();
+  });
+});
+
+describe("password reset & invitation e-mails", () => {
+  it("sends a branded reset link that works once, and invites a user by e-mail", async () => {
+    const { SMTPServer } = await import("smtp-server");
+    const mails: string[] = [];
+    const smtp = new SMTPServer({ authOptional: true, secure: false, disabledCommands: ["STARTTLS"], onAuth: (_a, _s, cb) => cb(null, { user: "ok" }),
+      onData(stream, _s, cb) { let d = ""; stream.on("data", (c) => (d += c)); stream.on("end", () => { mails.push(d.replace(/=\r?\n/g, "").replace(/=3D/g, "=")); cb(); }); } });
+    await new Promise<void>((r) => smtp.listen(2527, "127.0.0.1", () => r()));
+    await admin("/login", { body: { email: "owner@example.com", password: "Sup3rSecret!pass" } });
+    const email = (await admin("/integrations")).data.items.find((i: { type: string }) => i.type === "email");
+    await admin(`/integrations/${email.id}`, { method: "PATCH", body: { config: { ...email.config, smtp_host: "127.0.0.1", smtp_port: 2527, smtp_user: "support@utilmo.com" } } });
+
+    // Forgot password (unknown e-mail answers OK too, no enumeration).
+    expect((await admin("/forgot", { body: { email: "nobody@example.com" } })).status).toBe(200);
+    expect(mails.length).toBe(0);
+    expect((await admin("/forgot", { body: { email: "owner@example.com" } })).status).toBe(200);
+    expect(mails.length).toBe(1);
+    expect(mails[0]).toContain("utilmo-logo_2024.png");
+    const token = mails[0].match(/#\/reset\?token=([A-Za-z0-9_-]+)/)![1];
+    expect((await admin("/reset", { body: { token, password: "R3setSecret!pass" } })).status).toBe(200);
+    expect((await admin("/reset", { body: { token, password: "R3setSecret!pass" } })).status).toBe(400); // single use
+    expect((await admin("/login", { body: { email: "owner@example.com", password: "R3setSecret!pass" } })).status).toBe(200);
+
+    // Invitation without password.
+    const inv = await admin("/users", { body: { email: "invitee@example.com", role: "editor" } });
+    expect(inv.data.invited).toBe(true);
+    expect(mails[1]).toContain("invit");
+    const t2 = mails[1].match(/#\/reset\?token=([A-Za-z0-9_-]+)/)![1];
+    expect((await admin("/reset", { body: { token: t2, password: "Inv1teSecret!pass" } })).status).toBe(200);
+    expect((await admin("/login", { body: { email: "invitee@example.com", password: "Inv1teSecret!pass" }, cookie: "x" })).status).toBe(200);
     smtp.close();
   });
 });

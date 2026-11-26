@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getLang, setLang, tr } from "../i18n";
+import { getLang, L, setLang, tr } from "../i18n";
 import { api } from "../api";
 import { ErrorBox, Field } from "../ui";
 
@@ -8,11 +8,14 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [tokenConfigured, setTokenConfigured] = useState(true);
   const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [token, setToken] = useState(""); const [name, setName] = useState("");
   const [recover, setRecover] = useState(false);
+  const [forgot, setForgot] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false); const [done, setDone] = useState(false);
   useEffect(() => { api<{ needsSetup: boolean; setupTokenConfigured: boolean }>("/setup-status").then((r) => { setNeedsSetup(r.needsSetup); setTokenConfigured(r.setupTokenConfigured); }).catch(() => {}); }, []);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try {
+      if (forgot) { await api("/forgot", { body: { email } }); setForgotSent(true); return; }
       if (recover) { await api("/recover", { body: { token, email, password, name } }); setDone(true); setRecover(false); setToken(""); }
       else if (needsSetup) { await api("/setup", { body: { token, email, password, name } }); setDone(true); setNeedsSetup(false); }
       else { await api("/login", { body: { email, password } }); await api("/me", { method: "PATCH", body: { ui_language: getLang() } }).catch(() => {}); onLoggedIn(); }
@@ -33,9 +36,11 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         {(needsSetup || recover) && <Field label={recover ? tr("Jeton de récupération") : tr("Jeton de configuration")}><input className="input" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} required /></Field>}
         {(needsSetup || recover) && <Field label={tr("Nom")}><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>}
         <Field label={tr("Courriel")}><input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
-        <Field label={tr("Mot de passe")} hint={needsSetup || recover ? tr("12 caractères min., majuscule, minuscule et chiffre.") : undefined}><input className="input" type="password" autoComplete={needsSetup || recover ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
-        <button className="btn-primary w-full justify-center" disabled={busy}>{busy ? "…" : recover ? tr("Récupérer le compte") : needsSetup ? tr("Créer le compte") : tr("Se connecter")}</button>
-        {!needsSetup && <button type="button" className="w-full text-center text-xs text-slate-500 hover:text-brand" onClick={() => { setRecover(!recover); setError(null); }}>{recover ? tr("← Retour à la connexion") : tr("Accès perdu ? Récupérer le compte")}</button>}
+        {!forgot && <Field label={tr("Mot de passe")} hint={needsSetup || recover ? tr("12 caractères min., majuscule, minuscule et chiffre.") : undefined}><input className="input" type="password" autoComplete={needsSetup || recover ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>}
+        <button className="btn-primary w-full justify-center" disabled={busy}>{busy ? "…" : forgot ? L("Envoyer le lien", "Send the link") : recover ? tr("Récupérer le compte") : needsSetup ? tr("Créer le compte") : tr("Se connecter")}</button>
+        {forgotSent && <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{L("Si un compte existe pour ce courriel, un lien de réinitialisation vient d'être envoyé (valide 1 heure).", "If an account exists for this email, a reset link has just been sent (valid 1 hour).")}</div>}
+        {!needsSetup && !recover && <button type="button" className="w-full text-center text-xs text-slate-500 hover:text-brand" onClick={() => { setForgot(!forgot); setForgotSent(false); setError(null); }}>{forgot ? L("← Retour à la connexion", "← Back to login") : L("Mot de passe oublié ?", "Forgot your password?")}</button>}
+        {!needsSetup && !forgot && <button type="button" className="w-full text-center text-xs text-slate-500 hover:text-brand" onClick={() => { setRecover(!recover); setError(null); }}>{recover ? tr("← Retour à la connexion") : tr("Accès perdu ? Récupérer le compte")}</button>}
       </form>
     </div>
   );

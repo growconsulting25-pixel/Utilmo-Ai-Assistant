@@ -94,6 +94,35 @@ function applyMapping(payload: Record<string, unknown>, mapping?: Record<string,
   return out;
 }
 
+/** Send one e-mail through an e-mail integration (SMTP or Resend). Returns 250/2xx on acceptance. */
+export async function sendMail(it: Integration, secretValue: string, to: string[], mail: { subject: string; text: string; html: string }, idempotencyKey: string, signal?: AbortSignal): Promise<{ status: number; body: string }> {
+  if (!to.length) throw new Error("No recipients configured");
+  if (it.config.provider === "resend") {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST", signal, headers: { authorization: `Bearer ${secretValue}`, "content-type": "application/json", "idempotency-key": idempotencyKey },
+      body: JSON.stringify({ from: it.config.from, to, subject: mail.subject, text: mail.text, html: mail.html }),
+    });
+    return { status: r.status, body: (await r.text()).slice(0, 500) };
+  }
+  if (!it.config.smtp_host || !it.config.smtp_user) throw new Error("SMTP host/user not configured");
+  const nodemailer = (await import("nodemailer")).default;
+  const port = Number(it.config.smtp_port ?? 465);
+  const tx = nodemailer.createTransport({ host: it.config.smtp_host, port, secure: port === 465, auth: { user: it.config.smtp_user, pass: secretValue }, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 9000 });
+  const info = await tx.sendMail({ from: it.config.from || it.config.smtp_user, to, subject: mail.subject, text: mail.text, html: mail.html });
+  const ok = (info.accepted ?? []).length > 0;
+  return { status: ok ? 250 : 550, body: `accepted=${(info.accepted ?? []).join(",")} rejected=${(info.rejected ?? []).join(",")}`.slice(0, 500) };
+}
+
+/** Transactional e-mail (password reset, invitation) using the organization's configured sender. */
+export async function sendSystemEmail(orgId: string, to: string, mail: { subject: string; text: string; html: string }): Promise<boolean> {
+  const it = await one<Integration>(`SELECT * FROM integrations WHERE organization_id = $1 AND type = 'email' AND secret_encrypted IS NOT NULL ORDER BY enabled DESC, created_at LIMIT 1`, [orgId]);
+  if (!it) return false;
+  try {
+    const r = await sendMail(it, decrypt(it.secret_encrypted!), [to], mail, "system:" + randomToken(8));
+    return r.status === 250 || (r.status >= 200 && r.status < 300);
+  } catch (e) { console.warn("[mail] system email failed", String(e).slice(0, 200)); return false; }
+}
+
 async function send(it: Integration, d: Delivery): Promise<{ status: number; body: string }> {
   const secretValue = it.secret_encrypted ? decrypt(it.secret_encrypted) : "";
   const ctrl = new AbortController();
@@ -122,22 +151,7 @@ async function send(it: Integration, d: Delivery): Promise<{ status: number; bod
     if (it.type === "email") {
       const mail = renderEmail(d.event, d.payload);
       const to = (it.config.to ?? "").split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
-      if (!to.length) throw new Error("No recipients configured");
-      if (it.config.provider === "resend") {
-        const r = await fetch("https://api.resend.com/emails", {
-          method: "POST", signal: ctrl.signal, headers: { authorization: `Bearer ${secretValue}`, "content-type": "application/json", "idempotency-key": d.idempotency_key },
-          body: JSON.stringify({ from: it.config.from, to, subject: mail.subject, text: mail.text, html: mail.html }),
-        });
-        return { status: r.status, body: (await r.text()).slice(0, 500) };
-      }
-      // SMTP (Google Workspace, Microsoft 365, any provider). Password stored encrypted as the integration secret.
-      if (!it.config.smtp_host || !it.config.smtp_user) throw new Error("SMTP host/user not configured");
-      const nodemailer = (await import("nodemailer")).default;
-      const port = Number(it.config.smtp_port ?? 465);
-      const tx = nodemailer.createTransport({ host: it.config.smtp_host, port, secure: port === 465, auth: { user: it.config.smtp_user, pass: secretValue }, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 9000 });
-      const info = await tx.sendMail({ from: it.config.from || it.config.smtp_user, to, subject: mail.subject, text: mail.text, html: mail.html, headers: { "X-Utilmo-Event": d.event } });
-      const ok = (info.accepted ?? []).length > 0;
-      return { status: ok ? 250 : 550, body: `accepted=${(info.accepted ?? []).join(",")} rejected=${(info.rejected ?? []).join(",")}`.slice(0, 500) };
+      return await sendMail(it, secretValue, to, mail, d.idempotency_key, ctrl.signal);
     }
     if (it.type === "utilmo_crm") throw new Error("Utilmo CRM adapter not available: no documented Utilmo CRM API endpoint has been provided. Use a webhook (Zapier/Make) or supply the API documentation.");
     throw new Error(`Unsupported integration type ${it.type}`);
@@ -198,36 +212,96 @@ export async function sendTestEvent(orgId: string, integrationId: string) {
 
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-/** Human-readable notification e-mail (French first, the team's language). */
+const CAT_FR: Record<string, string> = { LEAD_GENERATION: "Génération de leads", CRM: "CRM", WEBSITE: "Site web", AUTOMATION: "Automatisation", MARKETING: "Marketing / visibilité", BRANDING: "Image de marque", AI_ASSISTANT: "IA", CUSTOMER_SUPPORT: "Soutien", GENERAL_INFORMATION: "Information", OTHER: "Autre" };
+
+/** Branded notification e-mail (Utilmo design, table-based for e-mail clients, French first). */
 export function renderEmail(event: string, p: Record<string, unknown>): { subject: string; text: string; html: string } {
   const lead = (p.lead ?? {}) as Record<string, unknown>;
   const prof = (p.profile ?? {}) as Record<string, { value?: unknown }>;
   const v = (k: string) => { const x = lead[k] ?? prof[k]?.value; return Array.isArray(x) ? x.join(", ") : x; };
-  const name = [v("first_name"), v("last_name")].filter(Boolean).join(" ") || "Visiteur";
+  const name = [v("first_name"), v("last_name")].filter(Boolean).join(" ");
   const conv = (p.conversation ?? {}) as Record<string, unknown>;
   const adminUrl = (p.admin_url ?? conv.admin_url) as string | undefined;
-  const titles: Record<string, string> = {
-    "lead.captured": `Nouveau lead : ${name}`,
-    "lead.qualified": `Lead qualifié : ${name}`,
-    "support.ticket_created": `Nouvelle demande de soutien #${p.reference ?? ""} : ${name}`,
-    "human.requested": `🔔 Un visiteur veut parler à quelqu'un${name !== "Visiteur" ? ` : ${name}` : ""}`,
-    "test.ping": "Test des notifications Utilmo AI",
+  let base = "https://utilmo-ai-assistant.netlify.app";
+  try { if (adminUrl) base = new URL(adminUrl).origin; } catch { /* */ }
+  const meta: Record<string, { emoji: string; label: string; title: string; intro: string; color: string; cta: string }> = {
+    "lead.captured": { emoji: "✨", label: "Nouveau lead", title: name ? `${name} a laissé ses coordonnées` : "Nouveau lead capté", intro: "Un visiteur a partagé ses coordonnées avec l'assistant. Voici son profil.", color: "#4c2b7b", cta: "Voir la conversation" },
+    "lead.qualified": { emoji: "🔥", label: "Lead qualifié", title: name ? `${name} est un lead qualifié` : "Nouveau lead qualifié", intro: "Ce lead correspond à vos critères de qualification. C'est le bon moment pour le contacter.", color: "#f47421", cta: "Voir le lead" },
+    "support.ticket_created": { emoji: "🛟", label: `Demande de soutien${p.reference ? ` #${p.reference}` : ""}`, title: name ? `${name} a besoin d'aide` : "Nouvelle demande de soutien", intro: "Un client existant a ouvert une demande de soutien depuis l'assistant.", color: "#4c2b7b", cta: "Voir la demande" },
+    "human.requested": { emoji: "🔔", label: "Parler à quelqu'un", title: name ? `${name} veut parler à un conseiller` : "Un visiteur veut parler à un conseiller", intro: "Le visiteur attend dans le clavardage. Ouvrez la conversation et cliquez « Prendre le relais » pour lui répondre en direct.", color: "#f47421", cta: "Répondre maintenant" },
+    "test.ping": { emoji: "✅", label: "Test", title: "Les notifications fonctionnent", intro: "Ce courriel confirme que l'envoi des notifications de l'assistant Utilmo est bien configuré.", color: "#22a861", cta: "Ouvrir l'administration" },
   };
-  const subject = `[Utilmo AI] ${titles[event] ?? event}`;
-  const rows: [string, unknown][] = [
-    ["Nom", name !== "Visiteur" ? name : null], ["Courriel", v("email")], ["Téléphone", v("phone")], ["Agence", v("brokerage")],
-    ["Ville / secteur", [v("city"), v("territory")].filter(Boolean).join(" · ")], ["Priorité / objectif", v("main_goal")],
-    ["Intérêts", v("services_interest")], ["Score", lead.score != null ? `${lead.score} (${lead.priority})` : null],
-    ["Catégorie", p.category], ["Problème", p.description], ["Résumé", conv.summary ?? p.summary], ["Dernier message", p.last_message],
-  ].filter(([, x]) => x !== null && x !== undefined && x !== "") as [string, unknown][];
-  const intro = event === "human.requested" ? "Un visiteur demande à parler à un membre de l'équipe. Ouvrez la conversation pour lui répondre directement dans le clavardage."
-    : event === "support.ticket_created" ? "Un client existant a ouvert une demande de soutien."
-    : event === "test.ping" ? "Les notifications par courriel fonctionnent." : "Un nouveau lead a été capté par l'assistant.";
-  const text = `${titles[event] ?? event}\n\n${intro}\n\n${rows.map(([k, x]) => `${k} : ${x}`).join("\n")}${adminUrl ? `\n\nOuvrir la conversation : ${adminUrl}` : ""}`;
-  const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1d2124;max-width:560px">
-<h2 style="color:#4c2b7b;font-size:18px;margin:0 0 8px">${esc(titles[event] ?? event)}</h2><p style="margin:0 0 14px">${esc(intro)}</p>
-<table style="border-collapse:collapse;width:100%">${rows.map(([k, x]) => `<tr><td style="padding:6px 10px 6px 0;color:#6b6578;vertical-align:top;white-space:nowrap">${esc(k)}</td><td style="padding:6px 0">${esc(x)}</td></tr>`).join("")}</table>
-${adminUrl ? `<p style="margin:18px 0 0"><a href="${esc(adminUrl)}" style="background:#f47421;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Ouvrir la conversation</a></p>` : ""}
-<p style="margin-top:20px;font-size:12px;color:#8d879a">Envoyé par l'assistant IA Utilmo.</p></div>`;
+  const m = meta[event] ?? { emoji: "•", label: event, title: event, intro: "", color: "#4c2b7b", cta: "Ouvrir" };
+  const subject = `${m.emoji} ${m.title}`;
+  const rows = ([
+    ["Nom", name], ["Courriel", v("email")], ["Téléphone", v("phone")], ["Agence", v("brokerage")],
+    ["Secteur", Array.from(new Set([v("city"), ...String(v("territory") ?? "").split(", ")].filter(Boolean))).join(", ")], ["Priorité", v("main_goal")],
+    ["Intérêts", String(v("services_interest") ?? "").split(", ").filter(Boolean).map((c) => CAT_FR[c] ?? c).join(", ")], ["Score", lead.score != null ? `${lead.score}/100 · ${({ high: "élevée", medium: "moyenne", low: "faible" } as Record<string, string>)[String(lead.priority)] ?? lead.priority}` : null],
+    ["Catégorie", p.category], ["Problème", p.description], ["Dernier message", p.last_message],
+  ] as [string, unknown][]).filter(([, x]) => x !== null && x !== undefined && x !== "");
+  const summary = (conv.summary ?? p.summary) as string | undefined;
+  const link = adminUrl ?? `${base}/admin/`;
+  const text = `${m.title}\n\n${m.intro}\n\n${rows.map(([k, x]) => `${k} : ${x}`).join("\n")}${summary ? `\n\nRésumé : ${summary}` : ""}\n\n${m.cta} : ${link}\n\n— Assistant IA Utilmo`;
+  const mailto = (x: unknown) => `<a href="mailto:${esc(x)}" style="color:#4c2b7b;text-decoration:none;font-weight:600">${esc(x)}</a>`;
+  const tel = (x: unknown) => `<a href="tel:${esc(String(x).replace(/[^\d+]/g, ""))}" style="color:#4c2b7b;text-decoration:none;font-weight:600">${esc(x)}</a>`;
+  const cell = (k: string, x: unknown) => (k === "Courriel" ? mailto(x) : k === "Téléphone" ? tel(x) : esc(x));
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(m.title)}</title></head>
+<body style="margin:0;padding:0;background:#f4f1f8;font-family:Montserrat,'Segoe UI',Helvetica,Arial,sans-serif;color:#1d2124">
+<div style="display:none;max-height:0;overflow:hidden">${esc(m.intro)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1f8;padding:32px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px">
+ <tr><td style="padding:0 4px 18px"><table role="presentation" width="100%"><tr>
+  <td><img src="${base}/brand/utilmo-logo_2024.png" width="104" alt="utilmo" style="display:block;border:0;height:auto"></td>
+  <td align="right" style="font-size:12px;color:#8d879a">Assistant IA</td></tr></table></td></tr>
+ <tr><td style="background:#ffffff;border-radius:18px;box-shadow:0 8px 28px rgba(76,43,123,.10);overflow:hidden">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+   <tr><td style="height:5px;background:${m.color};font-size:0;line-height:0">&nbsp;</td></tr>
+   <tr><td style="padding:28px 30px 8px">
+     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      <td style="vertical-align:middle;padding-right:12px"><img src="${base}/brand/utilmo-bot.png" width="46" height="46" alt="" style="display:block;border:0;border-radius:50%;background:#f4f1f8"></td>
+      <td style="vertical-align:middle"><span style="display:inline-block;background:${m.color}1a;color:${m.color};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:5px 10px;border-radius:999px">${m.emoji} ${esc(m.label)}</span></td>
+     </tr></table>
+     <h1 style="margin:18px 0 8px;font-family:Poppins,Montserrat,'Segoe UI',Arial,sans-serif;font-size:22px;line-height:1.3;color:#1d2124">${esc(m.title)}</h1>
+     <p style="margin:0;font-size:15px;line-height:1.6;color:#5f5a6b">${esc(m.intro)}</p>
+   </td></tr>
+   ${rows.length ? `<tr><td style="padding:18px 30px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #ebe7f1;border-radius:12px">
+     ${rows.map(([k, x], i) => `<tr><td style="padding:11px 14px;font-size:13px;color:#8d879a;width:120px;vertical-align:top;${i ? "border-top:1px solid #ebe7f1;" : ""}">${esc(k)}</td><td style="padding:11px 14px;font-size:14px;color:#1d2124;vertical-align:top;${i ? "border-top:1px solid #ebe7f1;" : ""}">${cell(k, x)}</td></tr>`).join("")}
+   </table></td></tr>` : ""}
+   ${summary ? `<tr><td style="padding:16px 30px 0"><div style="background:#f6f3fa;border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.55;color:#3d3747"><strong style="color:#4c2b7b">Résumé de la conversation</strong><br>${esc(summary)}</div></td></tr>` : ""}
+   <tr><td align="left" style="padding:24px 30px 30px">
+     <a href="${esc(link)}" style="display:inline-block;background:#f47421;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:13px 22px;border-radius:12px">${esc(m.cta)} →</a>
+   </td></tr>
+  </table>
+ </td></tr>
+ <tr><td align="center" style="padding:20px 10px 0;font-size:12px;line-height:1.6;color:#8d879a">
+   Envoyé automatiquement par l'assistant IA <strong style="color:#4c2b7b">Utilmo</strong><br>3737 Crémazie-Est, #401, Montréal · 514-360-2187 · support@utilmo.ca<br>
+   <a href="${base}/admin/#/notifications" style="color:#8d879a">Gérer les notifications</a>
+ </td></tr>
+</table></td></tr></table></body></html>`;
   return { subject, text, html };
+}
+
+/** Branded layout for account e-mails (reset, invitation). */
+export function accountEmail(base: string, kind: "reset" | "invite", link: string, extra: { inviter?: string; org?: string } = {}): { subject: string; text: string; html: string } {
+  const t = kind === "reset"
+    ? { subject: "🔐 Réinitialisez votre mot de passe Utilmo AI", title: "Réinitialiser votre mot de passe", intro: "Vous avez demandé à réinitialiser le mot de passe de votre accès à l'administration de l'assistant Utilmo. Ce lien est valide pendant 1 heure et ne peut servir qu'une fois.", cta: "Choisir un nouveau mot de passe", note: "Si vous n'êtes pas à l'origine de cette demande, ignorez ce courriel : votre mot de passe actuel reste inchangé." }
+    : { subject: "👋 Invitation à l'administration Utilmo AI", title: "Vous êtes invité à l'administration Utilmo AI", intro: `${extra.inviter ? `${extra.inviter} vous a invité` : "Vous avez été invité"} à gérer l'assistant IA${extra.org ? ` de ${extra.org}` : ""} : leads, conversations, base de connaissances et paramètres. Choisissez votre mot de passe pour activer votre accès (lien valide 72 heures).`, cta: "Activer mon accès", note: "Si vous ne vous attendiez pas à cette invitation, ignorez ce courriel." };
+  const text = `${t.title}\n\n${t.intro}\n\n${t.cta} : ${link}\n\n${t.note}\n\n— Assistant IA Utilmo`;
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(t.title)}</title></head>
+<body style="margin:0;padding:0;background:#f4f1f8;font-family:Montserrat,'Segoe UI',Helvetica,Arial,sans-serif;color:#1d2124">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1f8;padding:32px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px">
+ <tr><td style="padding:0 4px 18px"><img src="${base}/brand/utilmo-logo_2024.png" width="104" alt="utilmo" style="display:block;border:0;height:auto"></td></tr>
+ <tr><td style="background:#ffffff;border-radius:18px;box-shadow:0 8px 28px rgba(76,43,123,.10);overflow:hidden">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+   <tr><td style="height:5px;background:#4c2b7b;font-size:0;line-height:0">&nbsp;</td></tr>
+   <tr><td align="center" style="padding:30px 30px 6px"><img src="${base}/brand/utilmo-bot.png" width="64" height="64" alt="" style="display:block;border:0"></td></tr>
+   <tr><td align="center" style="padding:6px 30px 0"><h1 style="margin:10px 0 10px;font-family:Poppins,Montserrat,'Segoe UI',Arial,sans-serif;font-size:21px;line-height:1.3">${esc(t.title)}</h1>
+     <p style="margin:0;font-size:15px;line-height:1.6;color:#5f5a6b">${esc(t.intro)}</p></td></tr>
+   <tr><td align="center" style="padding:24px 30px 10px"><a href="${esc(link)}" style="display:inline-block;background:#f47421;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:13px 24px;border-radius:12px">${esc(t.cta)}</a></td></tr>
+   <tr><td align="center" style="padding:6px 30px 28px;font-size:12px;line-height:1.6;color:#8d879a">${esc(t.note)}<br><span style="word-break:break-all">${esc(link)}</span></td></tr>
+  </table></td></tr>
+ <tr><td align="center" style="padding:20px 10px 0;font-size:12px;line-height:1.6;color:#8d879a">Assistant IA <strong style="color:#4c2b7b">Utilmo</strong> · 3737 Crémazie-Est, #401, Montréal · 514-360-2187</td></tr>
+</table></td></tr></table></body></html>`;
+  return { subject: t.subject, text, html };
 }
