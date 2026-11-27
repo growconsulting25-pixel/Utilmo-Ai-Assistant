@@ -59,6 +59,8 @@ export function Header({ store, state, children }: { store: WidgetStore; state: 
           <button type="button" class="u-icon-btn" aria-label={t.menu} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><IconMore /></button>
           {menu && (
             <div class="u-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(false); } }}>
+              {s?.languages?.showSwitcher !== false && <div class="u-menu-lang">{((s?.languages?.enabled ?? ["fr", "en"]) as ("fr" | "en")[]).map((l) => (
+                <button role="menuitemradio" aria-checked={state.language === l} type="button" class={state.language === l ? "on" : ""} onClick={() => { setMenu(false); store.setLanguage(l); }}>{l === "fr" ? "Français" : "English"}</button>))}</div>}
               <button role="menuitem" type="button" onClick={() => { setMenu(false); store.reset(); }}><IconRefresh /> {t.newConversation}</button>
               <button role="menuitem" type="button" onClick={() => { setMenu(false); if (confirm(t.deleteConfirm)) void store.deleteData(); }}>{t.deleteData}</button>
             </div>

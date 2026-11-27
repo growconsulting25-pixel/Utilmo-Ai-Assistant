@@ -1,6 +1,6 @@
 export const STRINGS = {
   fr: {
-    online: "En ligne · répond en quelques secondes",
+    online: "En ligne · réponse rapide",
     placeholder: "Écrivez votre message…",
     send: "Envoyer",
     typing: "L'assistant écrit…",
