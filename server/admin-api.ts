@@ -442,7 +442,7 @@ route("PATCH", "/tickets/:id", "editor", async (req, p, s) => {
 // ------------------------------------------------------------------ integrations
 const IntegrationBody = z.object({
   type: z.enum(["webhook", "zapier", "make", "highlevel", "utilmo_crm", "email", "cal_com", "calendly"]), name: z.string().min(2).max(100), enabled: z.boolean().default(false),
-  config: z.object({ url: z.string().url().optional(), events: z.array(z.enum(["lead.captured", "lead.qualified", "support.ticket_created", "human.requested"])).default([]), field_mapping: z.record(z.string(), z.string()).optional(), location_id: z.string().max(100).optional(), to: z.string().max(1000).optional(), from: z.string().max(200).optional(), provider: z.enum(["smtp", "resend"]).optional(), smtp_host: z.string().max(200).optional(), smtp_port: z.number().int().min(1).max(65535).optional(), smtp_user: z.string().max(200).optional() }).default({ events: [] }),
+  config: z.object({ url: z.string().url().optional(), events: z.array(z.enum(["lead.captured", "lead.qualified", "support.ticket_created", "human.requested"])).default([]), field_mapping: z.record(z.string(), z.string()).optional(), location_id: z.string().max(100).optional(), to: z.string().max(1000).optional(), lead_to: z.string().max(1000).optional(), from: z.string().max(200).optional(), provider: z.enum(["smtp", "resend"]).optional(), smtp_host: z.string().max(200).optional(), smtp_port: z.number().int().min(1).max(65535).optional(), smtp_user: z.string().max(200).optional() }).default({ events: [] }),
   secret: z.string().max(2000).optional(),
 });
 function maskIntegration(i: Record<string, unknown>) { const { secret_encrypted, ...rest } = i; return { ...rest, has_secret: !!secret_encrypted }; }

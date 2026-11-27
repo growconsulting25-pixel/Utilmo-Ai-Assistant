@@ -27,7 +27,7 @@ export function Notifications({ role }: { role: string }) {
   useEffect(() => {
     if (!data) return;
     const c = existing?.config ?? {};
-    setF({ enabled: existing?.enabled ?? false, to: c.to ?? "support@marketingwebsites.ca, jean@marketingwebsites.ca, support@utilmo.com", events: c.events ?? EVENTS.filter((e) => e[0] !== "lead.qualified").map((e) => e[0]), provider: c.provider ?? "smtp", smtp_host: c.smtp_host ?? "", smtp_port: c.smtp_port ?? 465, smtp_user: c.smtp_user ?? "", from: c.from ?? "" });
+    setF({ enabled: existing?.enabled ?? false, to: c.to ?? "support@marketingwebsites.ca, jean@marketingwebsites.ca, support@utilmo.com", lead_to: c.lead_to ?? "", events: c.events ?? EVENTS.filter((e) => e[0] !== "lead.qualified").map((e) => e[0]), provider: c.provider ?? "smtp", smtp_host: c.smtp_host ?? "", smtp_port: c.smtp_port ?? 465, smtp_user: c.smtp_user ?? "", from: c.from ?? "" });
   }, [data]);
   if (loading || !f) return <Loading />;
   const save = async (thenTest = false) => {
@@ -38,7 +38,7 @@ export function Notifications({ role }: { role: string }) {
     }
     setBusy(true);
     try {
-      const config = { to: f.to, events: f.events, provider: f.provider, smtp_host: f.smtp_host || undefined, smtp_port: Number(f.smtp_port) || undefined, smtp_user: f.smtp_user || undefined, from: f.from || undefined };
+      const config = { to: f.to, lead_to: f.lead_to || undefined, events: f.events, provider: f.provider, smtp_host: f.smtp_host || undefined, smtp_port: Number(f.smtp_port) || undefined, smtp_user: f.smtp_user || undefined, from: f.from || undefined };
       let id = existing?.id;
       if (id) await api(`/integrations/${id}`, { method: "PATCH", body: { enabled: f.enabled, config, secret: secret || undefined } });
       else id = (await api("/integrations", { body: { type: "email", name: "Notifications courriel", enabled: f.enabled, config, secret: secret || undefined } })).id;
@@ -59,6 +59,7 @@ export function Notifications({ role }: { role: string }) {
         <div className="card space-y-4 p-5">
           <h2 className="text-sm font-semibold">{L("Qui reçoit quoi", "Who gets what")}</h2>
           <Field label={L("Destinataires (séparés par des virgules)", "Recipients (comma-separated)")}><textarea className="input h-20" disabled={!admin} value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></Field>
+          <Field label={L("Destinataires pour les leads seulement (optionnel)", "Recipients for leads only (optional)")} hint={L("Reçoivent uniquement les nouveaux leads, pas les demandes de soutien ni les demandes de conseiller.", "Only receive new leads, not support or advisor requests.")}><textarea className="input h-16" disabled={!admin} value={f.lead_to} onChange={(e) => setF({ ...f, lead_to: e.target.value })} /></Field>
           <Field label={L("Événements", "Events")}><div className="space-y-2">{EVENTS.map(([k, fr, en]) => (
             <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!admin} checked={f.events.includes(k)} onChange={(e) => setF({ ...f, events: e.target.checked ? [...f.events, k] : f.events.filter((x: string) => x !== k) })} />{L(fr, en)}</label>))}</div></Field>
           <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" disabled={!admin} checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} />{L("Notifications activées", "Notifications enabled")}</label>

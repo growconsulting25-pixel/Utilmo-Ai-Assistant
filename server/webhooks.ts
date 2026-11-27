@@ -150,7 +150,9 @@ async function send(it: Integration, d: Delivery): Promise<{ status: number; bod
     }
     if (it.type === "email") {
       const mail = renderEmail(d.event, d.payload);
-      const to = (it.config.to ?? "").split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+      const split = (v: unknown) => String(v ?? "").split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+      // Extra recipients who only get lead notifications (lead.captured / lead.qualified).
+      const to = [...new Set([...split(it.config.to), ...(String(d.event).startsWith("lead.") ? split((it.config as Record<string, unknown>).lead_to) : [])])];
       return await sendMail(it, secretValue, to, mail, d.idempotency_key, ctrl.signal);
     }
     if (it.type === "utilmo_crm") throw new Error("Utilmo CRM adapter not available: no documented Utilmo CRM API endpoint has been provided. Use a webhook (Zapier/Make) or supply the API documentation.");
