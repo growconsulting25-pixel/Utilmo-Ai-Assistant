@@ -28,7 +28,7 @@ export const STRINGS = {
     book: "Réserver une démo",
   },
   en: {
-    online: "Online · replies in seconds",
+    online: "Online · quick replies",
     placeholder: "Type your message…",
     send: "Send",
     typing: "The assistant is typing…",

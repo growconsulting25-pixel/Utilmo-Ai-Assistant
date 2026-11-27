@@ -29,4 +29,4 @@ If the floating bubble is already in the footer, keep only the `<div>` and this 
 ## Tips
 - Caching/optimisation plugins (WP Rocket, LiteSpeed, Autoptimize): exclude `widget.js` from "delay JavaScript"/"combine JS", otherwise the bubble appears late.
 - Open the chat from a button: `<a href="#" onclick="UtilmoAI.open();return false;">Parler à notre assistant</a>`
-- English pages: add `data-language="en"` to the script tag.
+- Language: the bubble follows the page language automatically (`<html lang>` set by WordPress/WPML/Polylang/Weglot, or `/en/` in the URL). Add `data-language="en"` or `"fr"` only to force one language.

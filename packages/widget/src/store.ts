@@ -52,10 +52,22 @@ export class WidgetStore {
     this.key = `utilmo-ai:v1:${api.assistantId}`;
     this.state = { ready: false, configError: null, config: null, language: language ?? "fr", messages: [], status: "idle", phase: null, token: null, conversationId: null, floatingOpen: false, unread: 0, inlineVisible: false, humanActive: false, agentName: null, handoff: false };
     this.languageForced = !!language;
+    this.pageLanguage = language ? undefined : detectPageLanguage();
+    if (this.pageLanguage) this.state.language = this.pageLanguage;
+    if (!language && typeof MutationObserver !== "undefined") {
+      // Sites that switch language without a reload (e.g. Weglot) update <html lang>: follow it.
+      new MutationObserver(() => {
+        const l = detectPageLanguage();
+        if (l && !this.languageForced && l !== this.state.language && this.langAllowed(l)) { this.pageLanguage = l; this.set({ language: l }); this.saveLocal(); }
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    }
     this.loadLocal();
     window.addEventListener("storage", (e) => { if (e.key === this.key && this.state.status === "idle") { this.loadLocal(); this.emit(); } });
   }
   private languageForced: boolean;
+  /** Language of the host page (<html lang>, then /en/ or /fr/ in the URL). Wins on page load. */
+  private pageLanguage: "fr" | "en" | undefined;
+  private langAllowed(l: "fr" | "en") { const en = (this.state.config?.settings as { languages?: { enabled?: string[] } } | undefined)?.languages?.enabled; return !en || en.includes(l); }
 
   subscribe(fn: Listener) { this.listeners.add(fn); fn(this.state); return () => this.listeners.delete(fn); }
   on(ev: EventName, fn: (d: unknown) => void) { if (!this.handlers.has(ev)) this.handlers.set(ev, new Set()); this.handlers.get(ev)!.add(fn); return () => this.handlers.get(ev)!.delete(fn); }
@@ -71,8 +83,10 @@ export class WidgetStore {
   private async doInit() {
     try {
       const config = await this.api.config();
-      const lang = this.languageForced ? this.state.language : ((this.readLocal()?.language as "fr" | "en") ?? config.settings.defaultLanguage);
-      this.set({ config, language: lang, ready: true });
+      this.set({ config });
+      if (this.pageLanguage && !this.langAllowed(this.pageLanguage)) this.pageLanguage = undefined;
+      const lang = this.languageForced ? this.state.language : (this.pageLanguage ?? (this.readLocal()?.language as "fr" | "en") ?? config.settings.defaultLanguage);
+      this.set({ language: lang, ready: true });
       this.purgeExpired();
       if (this.state.token) await this.syncFromServer();
       this.fire("ready");
@@ -91,7 +105,7 @@ export class WidgetStore {
       const messages: UIMessage[] = (r.messages ?? []).map((m: StoredMessage) => ({ id: m.id, role: m.role, agentName: m.agentName, content: m.content, actions: m.actions, status: "done", clientMessageId: m.clientMessageId }));
       const c = r.conversation as typeof r.conversation & { humanActive?: boolean; agentName?: string | null; handoff?: boolean };
       const newAgentMsgs = messages.filter((m) => m.role === "agent").length - this.state.messages.filter((m) => m.role === "agent").length;
-      this.set({ messages, conversationId: c.id, humanActive: !!c.humanActive, agentName: c.agentName ?? null, handoff: !!c.handoff, language: this.languageForced ? this.state.language : (c.language === "en" ? "en" : "fr") });
+      this.set({ messages, conversationId: c.id, humanActive: !!c.humanActive, agentName: c.agentName ?? null, handoff: !!c.handoff, language: this.languageForced ? this.state.language : (this.pageLanguage ?? (c.language === "en" ? "en" : "fr")) });
       if (newAgentMsgs > 0 && !this.state.floatingOpen && !this.state.inlineVisible) this.set({ unread: this.state.unread + newAgentMsgs });
       this.ensurePolling();
       this.saveLocal();
@@ -114,7 +128,7 @@ export class WidgetStore {
     try {
       await this.api.chat({
         assistantId: this.api.assistantId, sessionToken: this.state.token, message: content.slice(0, max), clientMessageId,
-        language: this.languageForced ? this.state.language : undefined, surface, firstTouch, page: { url: location.href.slice(0, 1900), title: document.title.slice(0, 280) },
+        language: this.languageForced ? this.state.language : this.pageLanguage ?? this.state.language, surface, firstTouch, page: { url: location.href.slice(0, 1900), title: document.title.slice(0, 280) },
       }, (ev) => {
         if (ev.type === "session") this.set({ token: ev.sessionToken, conversationId: ev.conversationId });
         else if (ev.type === "status") this.set({ phase: ev.status, status: ev.status === "writing" ? "streaming" : this.state.status });
@@ -125,7 +139,7 @@ export class WidgetStore {
           if (!ev.messageId) { this.set({ messages: this.state.messages.filter((m) => m.id !== assistant.id) }); if (ev.state === "HUMAN_HANDOFF") this.set({ handoff: true }); return; }
           this.patchMsg(assistant.id, { status: "done", id: ev.messageId });
           if (ev.state === "HUMAN_HANDOFF") this.set({ handoff: true });
-          if (!this.languageForced) this.set({ language: ev.language });
+          if (!this.languageForced) { this.pageLanguage = undefined; this.set({ language: ev.language }); }
         } else if (ev.type === "error") throw new ApiError(500, ev.code, ev.message);
       }, this.abort.signal);
       this.ensurePolling();
@@ -193,7 +207,7 @@ export class WidgetStore {
     const d = this.readLocal();
     if (!d) return;
     if (Date.now() - d.savedAt > 30 * 86400_000) { try { localStorage.removeItem(this.key); } catch { /* */ } return; }
-    this.state = { ...this.state, token: d.token, conversationId: d.conversationId, messages: (d.messages ?? []).filter((m) => m.status !== "streaming"), language: this.languageForced ? this.state.language : ((d.language as "fr" | "en") ?? this.state.language) };
+    this.state = { ...this.state, token: d.token, conversationId: d.conversationId, messages: (d.messages ?? []).filter((m) => m.status !== "streaming"), language: this.languageForced || this.pageLanguage ? this.state.language : ((d.language as "fr" | "en") ?? this.state.language) };
   }
   private purgeExpired() {
     const d = this.readLocal();
@@ -214,4 +228,15 @@ export class WidgetStore {
       return ft;
     } catch { return undefined; }
   }
+}
+
+/** "en-US" → "en"; falls back to a /en/ or /fr/ path segment. */
+export function detectPageLanguage(): "fr" | "en" | undefined {
+  try {
+    const l = (document.documentElement.lang || "").toLowerCase().slice(0, 2);
+    if (l === "en" || l === "fr") return l;
+    const m = location.pathname.match(/^\/(en|fr)(\/|$)/i);
+    if (m) return m[1].toLowerCase() as "fr" | "en";
+  } catch { /* not in a browser */ }
+  return undefined;
 }
