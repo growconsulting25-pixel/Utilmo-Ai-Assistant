@@ -222,7 +222,7 @@ export function renderEmail(event: string, p: Record<string, unknown>): { subjec
   const name = [v("first_name"), v("last_name")].filter(Boolean).join(" ");
   const conv = (p.conversation ?? {}) as Record<string, unknown>;
   const adminUrl = (p.admin_url ?? conv.admin_url) as string | undefined;
-  let base = "https://utilmo-ai-assistant.netlify.app";
+  let base = "https://ai.utilmo.com";
   try { if (adminUrl) base = new URL(adminUrl).origin; } catch { /* */ }
   const meta: Record<string, { emoji: string; label: string; title: string; intro: string; color: string; cta: string }> = {
     "lead.captured": { emoji: "✨", label: "Nouveau lead", title: name ? `${name} a laissé ses coordonnées` : "Nouveau lead capté", intro: "Un visiteur a partagé ses coordonnées avec l'assistant. Voici son profil.", color: "#4c2b7b", cta: "Voir la conversation" },

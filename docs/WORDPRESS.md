@@ -1,14 +1,14 @@
 # Adding the assistant to the Utilmo WordPress site
 
 `utilmo.com` and `www.utilmo.com` are already in the allowed domains (Admin → Comportement & apparence → Domaines autorisés).
-Replace `https://utilmo-ai-assistant.netlify.app` with your own domain (e.g. `https://ai.utilmo.com`) once self-hosted.
+The assistant is served from `https://ai.utilmo.com` (Netlify). The old address `https://utilmo-ai-assistant.netlify.app` still works.
 
 ## Floating bubble on every page
 Recommended: the free **WPCode** plugin (Insert Headers and Footers).
 1. WordPress → Extensions → Ajouter → search **WPCode** → install and activate.
 2. Code Snippets → **Header & Footer** → paste in **Footer**:
 ```html
-<script src="https://utilmo-ai-assistant.netlify.app/widget.js" data-assistant-id="utilmo" data-mode="floating" defer></script>
+<script src="https://ai.utilmo.com/widget.js" data-assistant-id="utilmo" data-mode="floating" defer></script>
 ```
 3. Save. Open the site in a private window: the Utilmo bot appears bottom-right.
 
@@ -18,7 +18,7 @@ Alternative without a plugin (Elementor Pro): Elementor → Custom Code → Add 
 In the page (Gutenberg block **HTML personnalisé**, or Elementor widget **HTML**):
 ```html
 <div id="utilmo-ai-chat"></div>
-<script src="https://utilmo-ai-assistant.netlify.app/widget.js" data-assistant-id="utilmo" data-mode="inline" data-container="#utilmo-ai-chat" defer></script>
+<script src="https://ai.utilmo.com/widget.js" data-assistant-id="utilmo" data-mode="inline" data-container="#utilmo-ai-chat" defer></script>
 ```
 If the floating bubble is already in the footer, keep only the `<div>` and this line instead (same conversation in both):
 ```html
