@@ -1,3 +1,4 @@
+import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { L } from "../i18n";
@@ -30,7 +31,12 @@ export function Notifications({ role }: { role: string }) {
   }, [data]);
   if (loading || !f) return <Loading />;
   const save = async (thenTest = false) => {
-    setErr(null); setBusy(true);
+    setErr(null);
+    if (secret && f.provider === "smtp" && /gmail|google/i.test(f.smtp_host) && !/^[a-z]{16}$/i.test(secret)) {
+      setErr(L("Ce n'est pas un mot de passe d'application Google : il doit contenir exactement 16 lettres (ex. abcd efgh ijkl mnop). Le mot de passe habituel du compte ne fonctionne pas.", "This is not a Google app password: it must be exactly 16 letters (e.g. abcd efgh ijkl mnop). The account's regular password does not work."));
+      return;
+    }
+    setBusy(true);
     try {
       const config = { to: f.to, events: f.events, provider: f.provider, smtp_host: f.smtp_host || undefined, smtp_port: Number(f.smtp_port) || undefined, smtp_user: f.smtp_user || undefined, from: f.from || undefined };
       let id = existing?.id;
@@ -72,7 +78,7 @@ export function Notifications({ role }: { role: string }) {
           </>}
           <Field label={L("Adresse d'expédition (optionnel)", "From address (optional)")}><input className="input" disabled={!admin} value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} placeholder="Utilmo AI <notifications@marketingwebsites.ca>" /></Field>
           <Field label={f.provider === "smtp" ? L("Mot de passe d'application", "App password") : L("Clé API Resend", "Resend API key")} hint={existing?.has_secret ? L("Déjà enregistré (chiffré). Laissez vide pour le conserver.", "Already saved (encrypted). Leave empty to keep it.") : f.provider === "smtp" ? L("Google : créez un « mot de passe d'application » (compte Google → Sécurité → Validation en 2 étapes → Mots de passe des applications). Microsoft 365 : SMTP authentifié doit être activé.", "Google: create an “app password” (Google account → Security → 2-Step Verification → App passwords). Microsoft 365: authenticated SMTP must be enabled.") : undefined}>
-            <input className="input" type="password" autoComplete="off" disabled={!admin} value={secret} onChange={(e) => setSecret(e.target.value)} />
+            <input className="input" type="text" name="smtp-app-secret" autoComplete="off" spellCheck={false} data-lpignore="true" data-1p-ignore="true" data-form-type="other" style={{ WebkitTextSecurity: "disc" } as React.CSSProperties} placeholder={existing?.has_secret ? "••••••••••••••••" : ""} disabled={!admin} value={secret} onChange={(e) => setSecret(e.target.value.replace(/\s+/g, f.provider === "smtp" ? "" : " ").trim())} />
           </Field>
           {admin && <div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={busy} onClick={() => save(false)}>{L("Enregistrer", "Save")}</button><button className="btn-secondary" disabled={busy} onClick={() => save(true)}>{L("Enregistrer et envoyer un test", "Save and send a test")}</button></div>}
         </div>
