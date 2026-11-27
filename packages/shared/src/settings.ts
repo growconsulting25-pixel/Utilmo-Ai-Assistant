@@ -35,6 +35,8 @@ export const SettingsSchema = z.object({
     assistantName: z.string().min(1).max(60).default("Assistant"),
     companyName: z.string().default("Company"),
     defaultLanguage: z.enum(["fr", "en"]).default("fr"),
+    /** Show "Sources:" links under answers in the chat (always kept in the admin). */
+    showSources: z.boolean().default(false),
     languages: z.object({
       enabled: z.array(z.enum(["fr", "en"])).min(1).default(["fr", "en"]),
       autoDetect: z.boolean().default(true),
@@ -163,6 +165,7 @@ export function publicSettings(s: AssistantSettings) {
     assistantName: s.behavior.assistantName,
     companyName: s.behavior.companyName,
     defaultLanguage: s.behavior.defaultLanguage,
+    showSources: s.behavior.showSources,
     languages: { enabled: s.behavior.languages.enabled, showSwitcher: s.behavior.languages.showSwitcher && s.behavior.languages.enabled.length > 1 },
     welcome: s.guidedFlow.enabled ? { fr: `${s.behavior.welcome.fr}\n\n**${s.guidedFlow.steps[0].question.fr}**`.trim(), en: `${s.behavior.welcome.en}\n\n**${s.guidedFlow.steps[0].question.en}**`.trim() } : s.behavior.welcome,
     suggestions: s.guidedFlow.enabled ? s.guidedFlow.steps[0].options : s.behavior.suggestions,

@@ -15,7 +15,7 @@ describe("knowledge bootstrap & retrieval", () => {
     const docs = await many<{ n: number }>(`SELECT count(*)::int AS n FROM knowledge_documents WHERE status = 'active'`);
     expect(docs[0].n).toBeGreaterThanOrEqual(7);
     expect(r.reply).toMatch(/Sources: .*(CRM|Sites web|site web)/i);
-    expect(r.actions.some((a) => a.type === "sources")).toBe(true);
+    expect(r.actions.some((a) => a.type === "sources")).toBe(false); // source links are hidden in the chat by default (behavior.showSources)
   });
   it("includes open source conflicts (e.g. 30 vs 14-day trial) so the model does not pick one silently (scenario 20)", async () => {
     const r = await chat(bg, "Combien de jours dure l'essai gratuit ?", null);

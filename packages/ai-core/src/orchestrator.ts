@@ -368,7 +368,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput, emit: (e: ChatSt
   if (decision.offerBooking && bookingAvailable) profile.flags = { ...(profile.flags ?? {}), q_since_offer: 0 } as typeof profile.flags;
   if (decision.offerBooking && bookingAvailable) actions.push({ type: "booking", url: s.booking.url, label: s.booking.label[language] || s.booking.label.fr });
   const sources = dedupeSources(chunks.filter((c) => c.priority <= 3 && c.url && c.score > 0.05));
-  if (sources.length && decision.state !== "CONTACT_CAPTURE" && analysis.intents.some((i) => ["PRODUCT_QUESTION", "PRICING_QUESTION", "INTEGRATION_QUESTION"].includes(i))) {
+  if (s.behavior.showSources && sources.length && decision.state !== "CONTACT_CAPTURE" && analysis.intents.some((i) => ["PRODUCT_QUESTION", "PRICING_QUESTION", "INTEGRATION_QUESTION"].includes(i))) {
     actions.push({ type: "sources", items: sources.slice(0, 3) });
   }
   const sugg = decision.suggestions[language].filter(Boolean);

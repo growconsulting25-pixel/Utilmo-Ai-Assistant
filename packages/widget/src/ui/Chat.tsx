@@ -92,6 +92,7 @@ function Actions({ actions, store, lang }: { actions: ChatAction[]; store: Widge
             <span class="u-card-label">{t.handoffTitle}{a.phone && <> · <a href={`tel:${a.phone.replace(/[^\d+]/g, "")}`}>{a.phone}</a></>}{a.email && <> · <a href={`mailto:${a.email}`}>{a.email}</a></>}</span>
           </div>
         );
+        if (a.type === "sources" && !(store.state.config?.settings as { showSources?: boolean } | undefined)?.showSources) return null;
         if (a.type === "sources") return (
           <div class="u-sources"><span>{t.sources} :</span>{a.items.map((s) => (hosts.some((h) => { try { return new URL(s.url).hostname.endsWith(h); } catch { return false; } }) ? <a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a> : null))}</div>
         );
