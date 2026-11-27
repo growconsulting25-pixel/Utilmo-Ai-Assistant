@@ -457,7 +457,8 @@ route("POST", "/integrations", "admin", async (req, _p, s, url) => {
   return json({ id: r!.id });
 });
 route("PATCH", "/integrations/:id", "admin", async (req, p, s) => {
-  const b = await body(req, IntegrationBody.partial());
+  // No defaults on PATCH: omitted fields must stay unchanged (a default would silently disable or wipe the integration).
+  const b = await body(req, IntegrationBody.extend({ enabled: z.boolean().optional(), config: IntegrationBody.shape.config.unwrap().extend({ events: z.array(z.enum(["lead.captured", "lead.qualified", "support.ticket_created", "human.requested"])).optional() }).optional() }).partial());
   if (b.config?.url) await assertSafeDestination(b.config.url).catch((e) => { throw new HttpError(400, "unsafe_destination", (e as Error).message); });
   await getDb().query(`UPDATE integrations SET name = coalesce($3, name), enabled = coalesce($4, enabled), config = coalesce($5::jsonb, config), secret_encrypted = coalesce($6, secret_encrypted), updated_at = now() WHERE id = $1 AND organization_id = $2`,
     [uuid.parse(p.id), s.org, b.name ?? null, b.enabled ?? null, b.config ? JSON.stringify(b.config) : null, b.secret ? encrypt(b.secret) : null]);
